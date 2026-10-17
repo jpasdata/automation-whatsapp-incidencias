@@ -84,6 +84,7 @@ def cargar_historico(
     ruta_indice: Path = RUTA_INDICE,
     reintento_seg: int = 30,
     fabrica_descargador=None,
+    intentos: int = 3,
 ) -> None:
     """
     Abre el grupo y trae el histórico hasta `desde` guardando en el índice, en DOS fases:
@@ -106,7 +107,7 @@ def cargar_historico(
         descargador = fabrica_descargador(indice) if fabrica_descargador else None
         ronda = 0
         try:
-            _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descargador, reintento_seg)
+            _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descargador, reintento_seg, intentos)
             if descargador is not None:
                 descargador.barrido_final(sesion.pagina)
         finally:
@@ -116,7 +117,7 @@ def cargar_historico(
                             descargador.total_ok, descargador.total_mal, n)
 
 
-def _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descargador, reintento_seg) -> None:
+def _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descargador, reintento_seg, intentos: int = 3) -> None:
     ronda = 0
     sin_avance = 0
     if True:
@@ -136,7 +137,7 @@ def _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descarga
                     descargador.procesar(sesion.pagina)
 
             stats = cargar_hacia_arriba(
-                sesion.pagina, desde=desde, max_seg=restante, al_tanda=guardar_tanda,
+                sesion.pagina, desde=desde, max_seg=restante, al_tanda=guardar_tanda, intentos_sin_tanda=intentos,
                 al_ciclo=(lambda: descargador.en_ciclo(sesion.pagina)) if descargador is not None else None,
                 al_progreso=lambda i: logger.info(
                     "  tandas: %d | burbujas: %d | ciclos: %d | intentos sin tanda: %d | %ds", i["tandas"], i["burbujas"], i["ciclos"], i["sin_tanda"], i["segundos"]),

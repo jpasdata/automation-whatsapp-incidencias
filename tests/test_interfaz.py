@@ -382,3 +382,11 @@ def test_el_grupo_se_muestra_con_su_nombre_corto(ui):
     assert ui._grupo_corto("1/4: CFFM_Veraguas_Sea_Central-Reporte de videos") == "Veraguas (1/4)"
     assert ui._grupo_corto("3/4: CFFM_Coclé_Sea_Central-Reporte de videos") == "Coclé (3/4)"
     assert ui._grupo_corto("2/4: Incidencias CFFM-MECOPT(Oeste)") == "Oeste (2/4)"
+
+
+def test_los_intentos_se_pasan_al_historico(ui):
+    ui.modo.set(next(m for m in ui_mod.MODOS if "descargar lo que cruza" in m))
+    ui.intentos.set("9")
+    assert ui.armar_comando()[-0:] and "--intentos" in ui.armar_comando() and ui.armar_comando()[ui.armar_comando().index("--intentos") + 1] == "9"
+    ui.intentos.set("")
+    assert "--intentos" not in ui.armar_comando()

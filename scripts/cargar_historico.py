@@ -35,6 +35,7 @@ ap.add_argument("--todos", action="store_true", help="Pasar por TODOS los grupos
 ap.add_argument("--dias", type=int, help="Hoy y N días antes (p. ej. 4 = desde hace 4 días a las 00:00)")
 ap.add_argument("--desde", help="Fecha de inicio AAAA-MM-DD (si no se da, --dias o whatsapp.cargar_desde)")
 ap.add_argument("--minutos", type=int, default=100, help="Tiempo máximo por grupo (default 100)")
+ap.add_argument("--intentos", type=int, default=6, help="Intentos seguidos sin mensajes nuevos antes de darlo por terminado (default 6; cada intento son 8 ciclos de subir)")
 ap.add_argument("--descargar", action="store_true", help="Descargar fotos y videos que cruzan con una incidencia (carpetas por día e incidencia)")
 ap.add_argument("--todo", action="store_true", help="Con --descargar: bajar TODO lo del chat, crucen o no (más lento y más riesgo de bloqueo)")
 ap.add_argument("--descarga-durante", action="store_true", help="Con --descargar: bajar mientras sube, no solo al terminar")
@@ -103,7 +104,7 @@ for n, grupo in enumerate(grupos, 1):
         fabrica = lambda indice, g=grupo, p=provincias: Descargador(  # noqa: E731
             cfg, excel, indice, g, p, desde, todo=args.todo, descarga_durante=args.descarga_durante, excel_vivo=vivo)
     try:
-        cargar_historico(cfg, grupo, desde, args.minutos, logger, fabrica_descargador=fabrica)
+        cargar_historico(cfg, grupo, desde, args.minutos, logger, fabrica_descargador=fabrica, intentos=args.intentos)
         resultados.append((grupo, "ok", time.time() - t0))
     except Exception:  # noqa: BLE001 - un grupo que falla no tumba a los demás
         logger.exception("FALLÓ el grupo '%s' (se sigue con el siguiente).", grupo)

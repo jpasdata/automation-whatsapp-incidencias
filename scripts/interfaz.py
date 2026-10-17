@@ -171,6 +171,7 @@ class Interfaz:
         self.dias = ctk.StringVar(value="4")
         self.desde = ctk.StringVar(value="")
         self.minutos = ctk.StringVar(value="100")
+        self.intentos = ctk.StringVar(value="6")
         self.al_dia = ctk.BooleanVar(value=True)
         self.encadenar = ctk.BooleanVar(value=True)
         self.subiendo = False          # el vigilante está subiendo el chat con el mouse (lo avisa su registro)
@@ -179,13 +180,16 @@ class Interfaz:
             f = bloque(2, col)
             etiqueta(f, titulo)
             ctk.CTkEntry(f, textvariable=var, height=32, font=(FUENTE, 13)).pack(fill="x", pady=(3, 0))
+        f = bloque(3, 0, 3)
+        etiqueta(f, "INTENTOS SIN NOVEDAD ANTES DE DAR POR TERMINADO EL HISTÓRICO (más intentos = busca más profundo)")
+        ctk.CTkEntry(f, textvariable=self.intentos, height=32, font=(FUENTE, 13), width=90).pack(anchor="w", pady=(3, 0))
         ctk.CTkCheckBox(cfg, text="Vigilante: si hay hueco, subir con el mouse unos minutos", variable=self.al_dia, font=(FUENTE, 12),
-                        text_color=TEXTO).grid(row=3, column=0, columnspan=3, sticky="w", padx=16, pady=(10, 4))
+                        text_color=TEXTO).grid(row=4, column=0, columnspan=3, sticky="w", padx=16, pady=(10, 4))
         ctk.CTkCheckBox(cfg, text="Al terminar un histórico, pasar solo a VIGILANTE (todos los grupos)", variable=self.encadenar, font=(FUENTE, 12),
-                        text_color=TEXTO).grid(row=4, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 4))
+                        text_color=TEXTO).grid(row=5, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 4))
         self.btn = ctk.CTkButton(cfg, text="▶  INICIAR", command=self.alternar, height=48, corner_radius=12, font=(FUENTE, 17, "bold"),
                                  fg_color=VERDE, hover_color=VERDE_H)
-        self.btn.grid(row=5, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 14))
+        self.btn.grid(row=6, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 14))
 
         self.v = {k: ctk.StringVar(value="-") for k in ("grupo", "fase", "tandas", "tiempo", "indice", "antiguo", "cruce", "fotos")}
         tarjetas = [("grupo", "Grupo actual", 0, 0, 1, 84), ("fase", "Fase", 0, 1, 1, 84), ("tandas", "Tandas cargadas", 1, 0, 1, 70), ("tiempo", "Tiempo corrido", 1, 1, 1, 70),
@@ -414,6 +418,8 @@ class Interfaz:
         if "cargar_historico" in script:
             orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
             orden += ["--minutos", self.minutos.get()]
+            if self.intentos.get().strip().isdigit():
+                orden += ["--intentos", self.intentos.get().strip()]
             if self.desde.get().strip():
                 orden += ["--desde", self.desde.get().strip()]
             elif self.dias.get().strip():
