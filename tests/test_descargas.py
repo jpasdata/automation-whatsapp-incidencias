@@ -29,3 +29,8 @@ def test_plan_organiza_por_dia_e_incidencia(tmp_path):
 def test_plan_omite_sin_fila_sin_adjunto_y_ya_descargadas(tmp_path):
     cruces = [_cruce("a", 1, con_fila=False), _cruce("b", 0), _cruce("c", 1)]
     assert plan_descargas(cruces, tmp_path, "G", {"c"}) == {}
+
+
+def test_todo_incluye_lo_que_no_cruza_en_sin_incidencia(tmp_path):
+    plan = plan_descargas([_cruce("a", 3, con_fila=False), _cruce("b", 0)], tmp_path, "G", set(), todo=True)
+    assert list(plan) == ["a"] and plan["a"].carpeta.name == "_sin_incidencia" and plan["a"].estado == "sin_cruce"

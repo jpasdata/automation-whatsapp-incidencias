@@ -28,8 +28,9 @@ from src.historico import RUTA_INDICE  # noqa: E402
 from src.verificador import hay_errores, informe, verificar  # noqa: E402
 from src.indice import Indice  # noqa: E402
 
+TODOS = "(todos los grupos, uno tras otro)"
 MODOS = {
-    "Histórico + descargar evidencias": ["scripts/cargar_historico.py", "--descargar"],
+    "Histórico + descargar lo que cruza (fotos y videos)": ["scripts/cargar_historico.py", "--descargar"],
     "Histórico sin descargar": ["scripts/cargar_historico.py"],
     "Solo actualizar lo nuevo": ["scripts/actualizar.py"],
 }
@@ -51,7 +52,7 @@ class Interfaz:
         fila.pack(fill="x")
         ttk.Label(fila, text="Grupo:").pack(side="left")
         self.grupo = tk.StringVar(value=self.cfg.whatsapp.grupos[0])
-        ttk.Combobox(fila, textvariable=self.grupo, values=self.cfg.whatsapp.grupos, width=38).pack(side="left", padx=6)
+        ttk.Combobox(fila, textvariable=self.grupo, values=[*self.cfg.whatsapp.grupos, TODOS], width=38).pack(side="left", padx=6)
         ttk.Label(fila, text="Modo:").pack(side="left")
         self.modo = tk.StringVar(value=list(MODOS)[0])
         ttk.Combobox(fila, textvariable=self.modo, values=list(MODOS), width=30, state="readonly").pack(side="left", padx=6)
@@ -85,7 +86,7 @@ class Interfaz:
 
     # --- control -----------------------------------------------------------------------------
     def alternar(self) -> None:
-        if self.proc and self.proc.poll() is None:
+        if self.btn.cget("text") == "DETENER":
             self.detener()
         else:
             self.iniciar()
@@ -104,28 +105,41 @@ class Interfaz:
     def iniciar(self) -> None:
         if not self.verificar_entorno():
             return
-        orden = [sys.executable, "-u", *MODOS[self.modo.get()]]
-        if "cargar_historico" in orden[2]:
-            orden += ["--grupo", self.grupo.get(), "--minutos", self.minutos.get()]
-        entorno = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-        self.proc = subprocess.Popen(orden, cwd=RAIZ, env=entorno, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     text=True, encoding="utf-8", errors="replace", creationflags=0x08000000)
-        threading.Thread(target=self._leer, daemon=True).start()
+        grupos = list(self.cfg.whatsapp.grupos) if self.grupo.get() == TODOS else [self.grupo.get()]
+        comandos = []
+        for g in grupos:
+            orden = [sys.executable, "-u", *MODOS[self.modo.get()]]
+            if "cargar_historico" in orden[2]:
+                orden += ["--grupo", g, "--minutos", self.minutos.get()]
+            comandos.append((g, orden))
+        self.parar = False
+        threading.Thread(target=self._secuencia, args=(comandos,), daemon=True).start()
         self.inicio = datetime.now()
+        self.texto.delete("1.0", "end")
         self.btn.config(text="DETENER", bg="#c62828")
         self.estado.set("Corriendo...")
         self.v["fase"].set("Abriendo WhatsApp Web")
 
+    def _secuencia(self, comandos) -> None:
+        """Corre los grupos uno tras otro (cada uno en su proceso) y vuelca su salida en la cola."""
+        entorno = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        for i, (g, orden) in enumerate(comandos, 1):
+            if self.parar:
+                break
+            self.cola.put(f"===== Grupo {i}/{len(comandos)}: {g} =====")
+            self.proc = subprocess.Popen(orden, cwd=RAIZ, env=entorno, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                         text=True, encoding="utf-8", errors="replace", creationflags=0x08000000)
+            for linea in self.proc.stdout:  # type: ignore[union-attr]
+                self.cola.put(linea.rstrip())
+            self.proc.wait()
+        self.cola.put("\0FIN")
+
     def detener(self) -> None:
+        self.parar = True
         if self.proc and self.proc.poll() is None:
             # taskkill /T cierra también el navegador que abrió el proceso
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True, creationflags=0x08000000)
         self.estado.set("Detenido por ti")
-
-    def _leer(self) -> None:
-        for linea in self.proc.stdout:  # type: ignore[union-attr]
-            self.cola.put(linea.rstrip())
-        self.cola.put("\0FIN")
 
     # --- refresco ----------------------------------------------------------------------------
     def _interpretar(self, linea: str) -> None:
@@ -153,7 +167,7 @@ class Interfaz:
                 self.texto.see("end")
         except queue.Empty:
             pass
-        if self.inicio and self.proc and self.proc.poll() is None:
+        if self.inicio and self.btn.cget("text") == "DETENER":
             self.v["tiempo"].set(str(datetime.now() - self.inicio).split(".")[0])
         self._resumen_indice()
         self.r.after(1000, self.refrescar)

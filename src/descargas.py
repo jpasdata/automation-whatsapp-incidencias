@@ -1,8 +1,9 @@
 """
-Descarga selectiva de evidencias: solo las fotos/videos que el cruce asocia a una incidencia del Excel
-(de las provincias del grupo), organizadas por día e incidencia:
+Descarga de evidencias: solo las fotos/videos que cruzan con una incidencia del Excel (o TODAS si todo=True),
+organizadas por día e incidencia:
 
     <raiz>/<Grupo>/<AAAA-MM-DD>/<fila>_<codigo>/<HHMM>_<remitente>_<id>_<n>.jpg
+    <raiz>/<Grupo>/<AAAA-MM-DD>/_sin_incidencia/...   (lo que no cruza con ninguna incidencia)
 
 Web solo mantiene pintados ~100 mensajes, así que la descarga se hace "al vuelo": justo después de cada
 tanda cargada, se recorre lo pintado y se baja lo pendiente que ya cruza con una incidencia.
@@ -45,17 +46,26 @@ class TareaDescarga:
     estado: str        # estado del cruce ('ok' | 'revisar_horario')
 
 
-def plan_descargas(cruces: list[ResultadoCruce], raiz: Path, grupo: str, ya_hechas: set[str]) -> dict[str, TareaDescarga]:
-    """Qué bajar: paquetes con adjunto que cruzan con una fila del Excel y aún no descargados."""
+def plan_descargas(
+    cruces: list[ResultadoCruce], raiz: Path, grupo: str, ya_hechas: set[str], todo: bool = False,
+) -> dict[str, TareaDescarga]:
+    """
+    Qué bajar: los paquetes con adjunto aún no descargados que cruzan con una fila del Excel (lo normal, para
+    no exceder el ritmo de descargas) o todos (`todo=True`). Los que cruzan van a <día>/<fila>_<código>/; el resto a <día>/_sin_incidencia/.
+    """
     plan: dict[str, TareaDescarga] = {}
     for c in cruces:
         m = c.match.mensaje
-        if c.fila is None or not m.id_mensaje or m.n_adjuntos <= 0 or m.id_mensaje in ya_hechas:
+        if not m.id_mensaje or m.n_adjuntos <= 0 or m.id_mensaje in ya_hechas or (c.fila is None and not todo):
             continue
-        codigo = c.fila.codigo_largo or c.fila.codigo_corto or c.fila.numero_aviso or "sin-codigo"
-        carpeta = raiz / _slug(grupo, 40) / f"{m.timestamp:%Y-%m-%d}" / f"{c.fila.fila_excel}_{_slug(codigo, 30)}"
+        if c.fila is not None:
+            codigo = c.fila.codigo_largo or c.fila.codigo_corto or c.fila.numero_aviso or "sin-codigo"
+            sub = f"{c.fila.fila_excel}_{_slug(codigo, 30)}"
+        else:
+            sub = "_sin_incidencia"
+        carpeta = raiz / _slug(grupo, 40) / f"{m.timestamp:%Y-%m-%d}" / sub
         base = f"{m.timestamp:%H%M}_{_slug(m.remitente, 14)}_{_slug(m.id_mensaje[-8:], 8)}"
-        plan[m.id_mensaje] = TareaDescarga(m.id_mensaje, carpeta, base, m.n_adjuntos, c.estado)
+        plan[m.id_mensaje] = TareaDescarga(m.id_mensaje, carpeta, base, m.n_adjuntos, c.estado if c.fila is not None else 'sin_cruce')
     return plan
 
 
@@ -114,9 +124,9 @@ class Descargador:
     """Se invoca después de cada tanda: cruza lo indexado y baja lo pendiente que ya cruza."""
 
     def __init__(self, cfg, excel: ExcelManager, indice: Indice, grupo: str, provincias: set[str] | None,
-                 desde: datetime, raiz: Path = RAIZ_EVIDENCIAS):
+                 desde: datetime, raiz: Path = RAIZ_EVIDENCIAS, todo: bool = False):
         self.cfg, self.excel, self.indice, self.grupo = cfg, excel, indice, grupo
-        self.provincias, self.desde, self.raiz = provincias, desde, raiz
+        self.provincias, self.desde, self.raiz, self.todo = provincias, desde, raiz, todo
         self.total_ok = self.total_mal = 0
 
     def calcular_plan(self) -> dict[str, TareaDescarga]:
@@ -126,7 +136,7 @@ class Descargador:
                       if r.mensaje.timestamp >= self.desde]
         cruces = cruzar(resultados, self.excel, m.margen_horas_evidencia, self.provincias)
         hechas = {i for i, (est, _) in self.indice.estado_descarga(self.grupo).items() if est is not None}
-        return plan_descargas(cruces, self.raiz, self.grupo, hechas)
+        return plan_descargas(cruces, self.raiz, self.grupo, hechas, self.todo)
 
     def procesar(self, pagina: Page) -> None:
         plan = self.calcular_plan()

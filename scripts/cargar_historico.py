@@ -7,7 +7,7 @@ Uso:
     python scripts/cargar_historico.py                  # primer grupo de config.yaml, hasta cargar_desde
     python scripts/cargar_historico.py --minutos 30     # esperar hasta 30 min a que WhatsApp sincronice
     python scripts/cargar_historico.py --grupo "Oeste"  # otro grupo (fragmento del título)
-    python scripts/cargar_historico.py --descargar      # además baja (al vuelo) las fotos que cruzan con el Excel
+    python scripts/cargar_historico.py --descargar      # además baja (al vuelo) las fotos y videos que cruzan con el Excel
 """
 import argparse
 import sys
@@ -23,7 +23,8 @@ from src.logger import setup_logger  # noqa: E402
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="Fragmento del título del grupo (por defecto, el primero de config.yaml)")
 ap.add_argument("--minutos", type=int, default=10, help="Tiempo máximo esperando el histórico (default 10)")
-ap.add_argument("--descargar", action="store_true", help="Descargar las fotos que cruzan con una incidencia de Henry (carpetas por día)")
+ap.add_argument("--descargar", action="store_true", help="Descargar fotos y videos que cruzan con una incidencia (carpetas por día e incidencia)")
+ap.add_argument("--todo", action="store_true", help="Con --descargar: bajar TODO lo del chat, crucen o no (más lento y más riesgo de bloqueo)")
 args = ap.parse_args()
 
 from src.verificador import hay_errores, informe, verificar  # noqa: E402
@@ -65,7 +66,7 @@ if args.descargar:
     )
     excel.abrir()
     provincias = provincias_de_grupo(cfg, grupo)
-    fabrica = lambda indice: Descargador(cfg, excel, indice, grupo, provincias, desde)  # noqa: E731
+    fabrica = lambda indice: Descargador(cfg, excel, indice, grupo, provincias, desde, todo=args.todo)  # noqa: E731
 
 cargar_historico(cfg, grupo, desde, args.minutos, logger, fabrica_descargador=fabrica)
 
