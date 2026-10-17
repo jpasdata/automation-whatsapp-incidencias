@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Interfaz sencilla: elige grupo, modo y tiempo (hoy y N días antes), un botón INICIAR/DETENER y un panel que muestra
-qué está haciendo (grupo, fase, tandas, cruce en vivo, descargas) más el registro en vivo.
+Interfaz moderna (CustomTkinter): elige grupo, modo y tiempo (hoy y N días antes), un botón INICIAR/DETENER y tarjetas que
+muestran qué está haciendo (grupo, fase, tandas, cruce en vivo, descargas) más el registro en vivo con colores.
 
 Uso:  python scripts/interfaz.py     (o doble clic en Iniciar_interfaz.bat)
 
-No contiene lógica propia: lanza scripts/cargar_historico.py (o scripts/actualizar.py) como proceso aparte
-y lee lo que ese proceso va escribiendo. El detalle completo queda en logs/detalle.log.
+No contiene lógica propia: lanza scripts/cargar_historico.py, scripts/vigilante.py, etc. como proceso aparte y lee lo que
+ese proceso va escribiendo. El detalle completo queda en logs/detalle.log.
 """
 import os
 import queue
@@ -14,11 +14,14 @@ import re
 import subprocess
 import sys
 import threading
-import tkinter as tk
-from tkinter import messagebox
 from datetime import datetime
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox
+
+try:
+    import customtkinter as ctk
+except ImportError:
+    sys.exit("Falta la librería de la interfaz. Ejecuta:  pip install -r requirements.txt")
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
@@ -40,90 +43,215 @@ MODOS = {
     "VIGILANTE: bajar todo lo que llega, todo el día": ("scripts/vigilante.py", []),
 }
 
+# Paleta (claro, oscuro)
+FONDO = ("#f1f5f9", "#0b1220")
+TARJETA = ("#ffffff", "#162033")
+BORDE = ("#e2e8f0", "#243049")
+TEXTO = ("#0f172a", "#e5edf8")
+TENUE = ("#64748b", "#8fa1bd")
+VERDE, VERDE_H = "#16a34a", "#15803d"
+ROJO, ROJO_H = "#dc2626", "#b91c1c"
+AZUL, AZUL_H = "#2563eb", "#1d4ed8"
+AMBAR = "#d97706"
+FUENTE = "Segoe UI"
+
 
 class Interfaz:
-    def __init__(self, raiz: tk.Tk):
+    def __init__(self, raiz: ctk.CTk):
         self.cfg = load_config()
         self.r = raiz
         self.proc: subprocess.Popen | None = None
         self.cola: queue.Queue[str] = queue.Queue()
         self.inicio: datetime | None = None
         self.parar = False
-        raiz.title("Evidencias WhatsApp - Incidencias")
-        raiz.geometry("940x680")
-        marco = ttk.Frame(raiz, padding=10)
-        marco.pack(fill="both", expand=True)
-
-        f1 = ttk.Frame(marco)
-        f1.pack(fill="x")
-        ttk.Label(f1, text="Grupo:").pack(side="left")
-        self.grupo = tk.StringVar(value=self.cfg.whatsapp.grupos[0])
-        ttk.Combobox(f1, textvariable=self.grupo, values=[*self.cfg.whatsapp.grupos, TODOS], width=46, state="readonly").pack(side="left", padx=6)
-        ttk.Label(f1, text="Modo:").pack(side="left")
-        self.modo = tk.StringVar(value=list(MODOS)[0])
-        ttk.Combobox(f1, textvariable=self.modo, values=list(MODOS), width=44, state="readonly").pack(side="left", padx=6)
-
-        f2 = ttk.Frame(marco)
-        f2.pack(fill="x", pady=6)
-        ttk.Label(f2, text="Tiempo: hoy y").pack(side="left")
-        self.dias = tk.StringVar(value="4")
-        ttk.Spinbox(f2, from_=0, to=60, textvariable=self.dias, width=4).pack(side="left", padx=4)
-        ttk.Label(f2, text="días antes   |   o desde (AAAA-MM-DD, opcional):").pack(side="left")
-        self.desde = tk.StringVar(value="")
-        ttk.Entry(f2, textvariable=self.desde, width=12).pack(side="left", padx=4)
-        ttk.Label(f2, text="   Tope por grupo (min):").pack(side="left")
-        self.minutos = tk.StringVar(value="100")
-        ttk.Spinbox(f2, from_=5, to=600, textvariable=self.minutos, width=5).pack(side="left", padx=4)
-
-        botones = ttk.Frame(marco)
-        botones.pack(fill="x", pady=6)
-        self.btn = tk.Button(botones, text="INICIAR", font=("Segoe UI", 14, "bold"), bg="#2e7d32", fg="white", width=12, command=self.alternar)
-        self.btn.pack(side="left")
-        for texto, cmd in (("Verificar entorno", self.verificar_entorno), ("Estado de descargas", self.ver_estado_descargas), ("Generar reporte Excel", self.generar_reporte),
-                           ("Limpiar y ordenar", self.limpiar), ("Actualizar desde GitHub", self.actualizar_proyecto),
-                           ("Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS)), ("Abrir Excel en vivo", self.abrir_excel_vivo), ("Abrir logs", lambda: os.startfile(RAIZ / "logs"))):
-            tk.Button(botones, text=texto, font=("Segoe UI", 10), command=cmd).pack(side="left", padx=5)
-        self.al_dia = tk.BooleanVar(value=False)
-        ttk.Checkbutton(botones, text="Vigilante: ponerse al día al iniciar (usa el mouse)", variable=self.al_dia).pack(side="left", padx=8)
-        self.estado = tk.StringVar(value="Detenido")
-        tk.Label(botones, textvariable=self.estado, font=("Segoe UI", 12, "bold")).pack(side="left", padx=12)
-
-        panel = ttk.LabelFrame(marco, text="Qué está haciendo", padding=8)
-        panel.pack(fill="x")
-        claves = [("grupo", "Grupo actual"), ("fase", "Fase"), ("tandas", "Tandas cargadas"), ("tiempo", "Tiempo corrido"),
-                  ("indice", "Mensajes en el índice"), ("antiguo", "Mensaje más antiguo"), ("cruce", "Cruce en vivo"), ("fotos", "Descargas")]
-        self.v = {k: tk.StringVar(value="-") for k, _ in claves}
-        for i, (k, t) in enumerate(claves):
-            ancho = k in ("cruce",)
-            ttk.Label(panel, text=t + ":").grid(row=i // 2, column=(i % 2) * 2, sticky="e", padx=4, pady=2)
-            ttk.Label(panel, textvariable=self.v[k], font=("Segoe UI", 9, "bold"), wraplength=330 if not ancho else 330).grid(
-                row=i // 2, column=(i % 2) * 2 + 1, sticky="w", padx=4)
-
-        self.texto = tk.Text(marco, height=18, bg="#111", fg="#ddd", font=("Consolas", 9), wrap="word")
-        self.texto.pack(fill="both", expand=True, pady=(8, 0))
-        ttk.Label(marco, text="Mientras corre, no muevas el mouse ni toques la ventana de Chromium (el scroll usa el mouse real).",
-                  foreground="#b71c1c").pack(anchor="w", pady=(4, 0))
+        raiz.title("Evidencias WhatsApp · Incidencias")
+        raiz.geometry("1420x860")
+        raiz.minsize(1240, 700)
+        raiz.configure(fg_color=FONDO)
+        raiz.grid_columnconfigure(1, weight=1)
+        raiz.grid_rowconfigure(0, weight=1)
+        self._lateral(raiz)
+        self._principal(raiz)
         self.refrescar()
 
+    # --- construcción de la interfaz ---------------------------------------------------------------
+    def _lateral(self, raiz) -> None:
+        lat = ctk.CTkFrame(raiz, width=236, corner_radius=0, fg_color=TARJETA, border_width=0)
+        lat.grid(row=0, column=0, sticky="nsew")
+        lat.grid_propagate(False)
+        ctk.CTkLabel(lat, text="📷  Evidencias", font=(FUENTE, 22, "bold"), text_color=TEXTO).pack(anchor="w", padx=22, pady=(24, 0))
+        ctk.CTkLabel(lat, text="WhatsApp → Incidencias de Henry", font=(FUENTE, 12), text_color=TENUE).pack(anchor="w", padx=22, pady=(0, 18))
+
+        def seccion(titulo):
+            ctk.CTkLabel(lat, text=titulo.upper(), font=(FUENTE, 10, "bold"), text_color=TENUE).pack(anchor="w", padx=22, pady=(14, 4))
+
+        def boton(texto, cmd, color=None):
+            ctk.CTkButton(lat, text=texto, command=cmd, anchor="w", height=36, corner_radius=8, font=(FUENTE, 13),
+                          fg_color=color or "transparent", hover_color=BORDE, text_color=TEXTO).pack(fill="x", padx=12, pady=1)
+
+        seccion("Control")
+        boton("✔  Verificar entorno", self.verificar_entorno)
+        boton("📈  Estado de descargas", self.ver_estado_descargas)
+        seccion("Resultados")
+        boton("📊  Abrir Excel en vivo", self.abrir_excel_vivo)
+        boton("🧾  Generar reporte Excel", self.generar_reporte)
+        boton("🗂  Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS))
+        boton("📜  Abrir logs", lambda: os.startfile(RAIZ / "logs"))
+        seccion("Mantenimiento")
+        boton("🧹  Limpiar y ordenar", self.limpiar)
+        boton("⬇  Actualizar desde GitHub", self.actualizar_proyecto)
+
+        pie = ctk.CTkFrame(lat, fg_color="transparent")
+        pie.pack(side="bottom", fill="x", padx=18, pady=16)
+        ctk.CTkLabel(pie, text="⚠ Mientras corre un histórico no muevas el mouse.", font=(FUENTE, 11), text_color=AMBAR,
+                     wraplength=190, justify="left").pack(anchor="w", pady=(10, 0))
+
+    def _principal(self, raiz) -> None:
+        cuerpo = ctk.CTkFrame(raiz, fg_color="transparent")
+        cuerpo.grid(row=0, column=1, sticky="nsew", padx=20, pady=16)
+        cuerpo.grid_columnconfigure(0, weight=0, minsize=470)
+        cuerpo.grid_columnconfigure(1, weight=1)
+        cuerpo.grid_rowconfigure(1, weight=1)
+
+        # encabezado: título, estado y tema claro/oscuro
+        enc = ctk.CTkFrame(cuerpo, fg_color="transparent")
+        enc.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        enc.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(enc, text="Panel de control", font=(FUENTE, 26, "bold"), text_color=TEXTO).grid(row=0, column=0, sticky="w")
+        self.tema = ctk.CTkSegmentedButton(enc, values=["☀  Claro", "🌙  Oscuro"], command=self._cambiar_tema, font=(FUENTE, 12), height=30)
+        self.tema.set("🌙  Oscuro")
+        self.tema.grid(row=0, column=1, sticky="e", padx=(0, 14))
+        self.estado = ctk.StringVar(value="Detenido")
+        self.pastilla = ctk.CTkLabel(enc, textvariable=self.estado, font=(FUENTE, 13, "bold"), text_color="white", fg_color="#64748b",
+                                     corner_radius=14, height=30, padx=16)
+        self.pastilla.grid(row=0, column=2, sticky="e")
+
+        # columna izquierda: configuración + tarjetas
+        izq = ctk.CTkScrollableFrame(cuerpo, fg_color="transparent", width=450)
+        izq.grid(row=1, column=0, sticky="nsew", padx=(0, 12))
+        izq.grid_columnconfigure((0, 1), weight=1, uniform="c")
+        cfg = ctk.CTkFrame(izq, fg_color=TARJETA, corner_radius=14, border_width=1, border_color=BORDE)
+        cfg.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        cfg.grid_columnconfigure((0, 1, 2), weight=1, uniform="f")
+
+        def etiqueta(padre, titulo):
+            ctk.CTkLabel(padre, text=titulo, font=(FUENTE, 10, "bold"), text_color=TENUE).pack(anchor="w")
+
+        def bloque(fila, col, span=1):
+            f = ctk.CTkFrame(cfg, fg_color="transparent")
+            f.grid(row=fila, column=col, columnspan=span, sticky="ew", padx=14, pady=(10, 2))
+            return f
+
+        self.grupo = ctk.StringVar(value=self.cfg.whatsapp.grupos[0])
+        f = bloque(0, 0, 3)
+        etiqueta(f, "GRUPO")
+        ctk.CTkOptionMenu(f, variable=self.grupo, values=[*self.cfg.whatsapp.grupos, TODOS], height=34, dynamic_resizing=False, width=420,
+                          font=(FUENTE, 13), fg_color=AZUL, button_color=AZUL_H).pack(fill="x", pady=(3, 0))
+        self.modo = ctk.StringVar(value=list(MODOS)[0])
+        f = bloque(1, 0, 3)
+        etiqueta(f, "MODO")
+        ctk.CTkOptionMenu(f, variable=self.modo, values=list(MODOS), height=34, dynamic_resizing=False, width=420, font=(FUENTE, 13),
+                          fg_color=AZUL, button_color=AZUL_H).pack(fill="x", pady=(3, 0))
+        self.dias = ctk.StringVar(value="4")
+        self.desde = ctk.StringVar(value="")
+        self.minutos = ctk.StringVar(value="100")
+        self.al_dia = ctk.BooleanVar(value=True)
+        for col, (titulo, var) in enumerate((("HOY Y … DÍAS ANTES", self.dias), ("O DESDE (AAAA-MM-DD)", self.desde), ("TOPE POR GRUPO (MIN)", self.minutos))):
+            f = bloque(2, col)
+            etiqueta(f, titulo)
+            ctk.CTkEntry(f, textvariable=var, height=32, font=(FUENTE, 13)).pack(fill="x", pady=(3, 0))
+        ctk.CTkCheckBox(cfg, text="Vigilante: si hay hueco, subir con el mouse unos minutos", variable=self.al_dia, font=(FUENTE, 12),
+                        text_color=TEXTO).grid(row=3, column=0, columnspan=3, sticky="w", padx=16, pady=(10, 4))
+        self.btn = ctk.CTkButton(cfg, text="▶  INICIAR", command=self.alternar, height=48, corner_radius=12, font=(FUENTE, 17, "bold"),
+                                 fg_color=VERDE, hover_color=VERDE_H)
+        self.btn.grid(row=4, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 14))
+
+        self.v = {k: ctk.StringVar(value="-") for k in ("grupo", "fase", "tandas", "tiempo", "indice", "antiguo", "cruce", "fotos")}
+        tarjetas = [("grupo", "Grupo actual", 0, 0, 1, 84), ("fase", "Fase", 0, 1, 1, 84), ("tandas", "Tandas cargadas", 1, 0, 1, 70), ("tiempo", "Tiempo corrido", 1, 1, 1, 70),
+                    ("indice", "Mensajes en el índice", 2, 0, 1, 70), ("antiguo", "Mensaje más antiguo", 2, 1, 1, 70),
+                    ("fotos", "Descargas", 3, 0, 2, 96), ("cruce", "Cruce en vivo", 4, 0, 2, 112)]
+        rejilla = ctk.CTkFrame(izq, fg_color="transparent")
+        rejilla.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        rejilla.grid_columnconfigure((0, 1), weight=1, uniform="k")
+        for clave, titulo, fila, col, span, alto in tarjetas:
+            self._tarjeta(rejilla, fila, col, titulo, self.v[clave], span, alto=alto)
+        self.barra = ctk.CTkProgressBar(izq, mode="indeterminate", height=6, progress_color=VERDE)
+        self.barra.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.barra.set(0)
+
+        # columna derecha: registro en vivo, alto y ancho
+        reg = ctk.CTkFrame(cuerpo, fg_color=TARJETA, corner_radius=14, border_width=1, border_color=BORDE)
+        reg.grid(row=1, column=1, sticky="nsew")
+        reg.grid_columnconfigure(0, weight=1)
+        reg.grid_rowconfigure(1, weight=1)
+        cab = ctk.CTkFrame(reg, fg_color="transparent")
+        cab.grid(row=0, column=0, sticky="ew", padx=16, pady=(10, 0))
+        ctk.CTkLabel(cab, text="REGISTRO EN VIVO", font=(FUENTE, 11, "bold"), text_color=TENUE).pack(side="left")
+        ctk.CTkButton(cab, text="Limpiar vista", width=96, height=24, font=(FUENTE, 11), fg_color="transparent", border_width=1,
+                      border_color=BORDE, text_color=TEXTO, hover_color=BORDE, command=lambda: self.texto.delete("1.0", "end")).pack(side="right")
+        self.texto = ctk.CTkTextbox(reg, font=("Consolas", 12), fg_color=("#f8fafc", "#0b1220"), text_color=("#0f172a", "#cbd5e1"), corner_radius=10, wrap="word")
+        self.texto.grid(row=1, column=0, sticky="nsew", padx=12, pady=(6, 12))
+        self._colores_log()
+
+    def _colores_log(self) -> None:
+        """Colores del registro según el tema (el texto de un tk.Text no admite pares claro/oscuro)."""
+        oscuro = ctk.get_appearance_mode() == "Dark"
+        paleta = ({"error": "#f87171", "aviso": "#fbbf24", "ok": "#4ade80", "info": "#38bdf8", "titulo": "#a5b4fc"} if oscuro else
+                  {"error": "#b91c1c", "aviso": "#b45309", "ok": "#15803d", "info": "#0369a1", "titulo": "#4338ca"})
+        t = self.texto._textbox
+        for tag, color in paleta.items():
+            t.tag_config(tag, foreground=color)
+        t.tag_config("titulo", font=("Consolas", 12, "bold"))
+
+    def _tarjeta(self, padre, fila, col, titulo, var, span, alto=92) -> None:
+        f = ctk.CTkFrame(padre, fg_color=TARJETA, corner_radius=12, border_width=1, border_color=BORDE, height=alto)
+        f.grid(row=fila, column=col, columnspan=span, sticky="nsew", padx=5, pady=5)
+        f.grid_propagate(False)
+        ctk.CTkLabel(f, text=titulo.upper(), font=(FUENTE, 10, "bold"), text_color=TENUE).pack(anchor="w", padx=14, pady=(10, 0))
+        ctk.CTkLabel(f, textvariable=var, font=(FUENTE, 14, "bold"), text_color=TEXTO, anchor="w", justify="left",
+                     wraplength=190 * span + 30 * (span - 1)).pack(anchor="w", padx=14, pady=(2, 8), fill="x")
+
+    def _cambiar_tema(self, valor: str = "") -> None:
+        ctk.set_appearance_mode("dark" if "Oscuro" in (valor or self.tema.get()) else "light")
+        self._colores_log()
+        self._colores_log()
+
     # --- control -----------------------------------------------------------------------------
+    def _estado(self, texto: str, color: str = "#64748b") -> None:
+        self.estado.set(texto)
+        self.pastilla.configure(fg_color=color)
+
     def alternar(self) -> None:
-        if self.btn.cget("text") == "DETENER":
+        if self._corriendo():
             self.detener()
         else:
             self.iniciar()
 
+    def _corriendo(self) -> bool:
+        return self.btn.cget("text").endswith("DETENER")
+
     def _mostrar(self, texto: str) -> None:
         self.texto.delete("1.0", "end")
-        self.texto.insert("end", texto + "\n")
+        self._escribir(texto)
+
+    def _escribir(self, texto: str) -> None:
+        t = self.texto._textbox
+        for linea in texto.splitlines():
+            up = linea.upper()
+            tag = ("error" if ("ERROR" in up or "TRACEBACK" in up or "FALLÓ" in up) else "aviso" if ("WARNING" in up or "AVISO" in up or "OMITIDO" in up)
+                   else "ok" if ("-> OK" in up or "[ OK" in up or "LISTO" in up) else "titulo" if ("#####" in linea or "=====" in linea)
+                   else "info" if any(k in up for k in ("CRUCE EN VIVO", "DESCARGA", "EXCEL EN VIVO", "VUELTA", "IDENTIFICADA", "TANDA")) else None)
+            t.insert("end", linea + "\n", tag)
+        t.see("end")
 
     def verificar_entorno(self) -> bool:
         """Corre las revisiones previas y las muestra en el panel. True si se puede correr."""
-        self.estado.set("Verificando...")
+        self._estado("Verificando…", AZUL)
         self.r.update_idletasks()
         res = verificar()
         self._mostrar(informe(res))
         ok = not hay_errores(res)
-        self.estado.set("Listo para correr" if ok else "Hay errores: lee 'QUÉ HACER'")
+        self._estado("Listo para correr" if ok else "Hay errores: lee «QUÉ HACER»", VERDE if ok else ROJO)
         return ok
 
     def ver_estado_descargas(self) -> None:
@@ -135,7 +263,7 @@ class Interfaz:
         if ruta.exists():
             os.startfile(ruta)
         else:
-            self.estado.set("Aún no hay Excel en vivo: se crea con la primera vuelta/cruce")
+            self._estado("Aún no hay Excel en vivo (se crea con la primera vuelta)", AMBAR)
 
     def _ejecutar(self, args: list[str]) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, *args], cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -143,26 +271,26 @@ class Interfaz:
 
     def limpiar(self) -> None:
         """Muestra qué se limpiaría (simulación), pregunta y aplica. Nunca borra evidencias, índice, sesión ni Excel."""
-        if self.btn.cget("text") == "DETENER":
+        if self._corriendo():
             messagebox.showwarning("Limpiar", "Detén primero el bot (botón DETENER) y vuelve a intentar.")
             return
         p = self._ejecutar(["scripts/limpiar.py", "--simular"])
         self._mostrar((p.stdout + p.stderr).strip())
         if p.returncode != 0:
             return
-        if not messagebox.askyesno("Limpiar y ordenar", "Esto es lo que se hará (ver el panel).\nNada de evidencias, índice, sesión ni Excel se borra: "
+        if not messagebox.askyesno("Limpiar y ordenar", "Esto es lo que se hará (ver el registro).\nNada de evidencias, índice, sesión ni Excel se borra: "
                                    "lo viejo se archiva.\n\n¿Aplicar la limpieza?"):
             return
         reorg = messagebox.askyesno("Limpiar y ordenar", "¿También reorganizar lo ya descargado (renombrar y mover a las carpetas con aviso/incidencia)?")
-        self.estado.set("Limpiando...")
+        self._estado("Limpiando…", AZUL)
         self.r.update_idletasks()
         p = self._ejecutar(["scripts/limpiar.py", *(["--reorganizar"] if reorg else [])])
         self._mostrar((p.stdout + p.stderr).strip())
-        self.estado.set("Limpieza terminada" if p.returncode == 0 else "La limpieza tuvo errores: lee el panel")
+        self._estado("Limpieza terminada" if p.returncode == 0 else "La limpieza tuvo errores: lee el registro", VERDE if p.returncode == 0 else ROJO)
 
     def actualizar_proyecto(self) -> None:
         """Baja la versión nueva de GitHub con Actualizar_proyecto.bat (en otra ventana). Cierra la interfaz porque el código cambia."""
-        if self.btn.cget("text") == "DETENER":
+        if self._corriendo():
             messagebox.showwarning("Actualizar", "Detén primero el bot (botón DETENER) y vuelve a intentar.")
             return
         if not messagebox.askyesno("Actualizar desde GitHub", "Se cerrarán los procesos viejos, se bajará la versión nueva y se regenerará "
@@ -174,14 +302,13 @@ class Interfaz:
 
     def generar_reporte(self) -> None:
         """Genera el reporte Excel con formato a partir de lo indexado y descargado (no abre WhatsApp)."""
-        orden = [sys.executable, "scripts/generar_reporte.py", "--todos"]
+        orden = ["scripts/generar_reporte.py", "--todos"]
         orden += ["--desde", self.desde.get().strip()] if self.desde.get().strip() else ["--dias", self.dias.get().strip() or "4"]
-        self.estado.set("Generando reporte...")
+        self._estado("Generando reporte…", AZUL)
         self.r.update_idletasks()
-        p = subprocess.run(orden, cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           env={**os.environ, "PYTHONIOENCODING": "utf-8"}, creationflags=0x08000000)
+        p = self._ejecutar(orden)
         self._mostrar((p.stdout + p.stderr).strip())
-        self.estado.set("Reporte listo (carpeta data/Reportes)" if p.returncode == 0 else "Error al generar el reporte")
+        self._estado("Reporte listo (data/Reportes)" if p.returncode == 0 else "Error al generar el reporte", VERDE if p.returncode == 0 else ROJO)
         if p.returncode == 0:
             os.startfile(RAIZ / "data" / "Reportes")
 
@@ -190,8 +317,8 @@ class Interfaz:
         orden = [sys.executable, "-u", script, *fijas]
         if "vigilante" in script:
             orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
-            if self.al_dia.get():
-                orden += ["--ponerse-al-dia"]
+            if not self.al_dia.get():
+                orden += ["--sin-mouse"]
         if "cargar_historico" in script:
             orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
             orden += ["--minutos", self.minutos.get()]
@@ -209,8 +336,9 @@ class Interfaz:
         self._mostrar("Comando: " + " ".join(orden[2:]) + "\n")
         threading.Thread(target=self._correr, args=(orden,), daemon=True).start()
         self.inicio = datetime.now()
-        self.btn.config(text="DETENER", bg="#c62828")
-        self.estado.set("Corriendo...")
+        self.btn.configure(text="■  DETENER", fg_color=ROJO, hover_color=ROJO_H)
+        self._estado("Corriendo…", VERDE)
+        self.barra.start()
         for k in ("grupo", "fase", "tandas", "cruce", "fotos"):
             self.v[k].set("-")
         self.v["fase"].set("Abriendo WhatsApp Web")
@@ -229,7 +357,7 @@ class Interfaz:
         if self.proc and self.proc.poll() is None:
             # taskkill /T cierra también el navegador que abrió el proceso
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True, creationflags=0x08000000)
-        self.estado.set("Detenido por ti")
+        self._estado("Detenido por ti", "#64748b")
 
     # --- refresco ----------------------------------------------------------------------------
     def _interpretar(self, linea: str) -> None:
@@ -248,8 +376,8 @@ class Interfaz:
         if "VUELTA:" in linea:
             self.v["fotos"].set(linea.split("VUELTA:")[-1].strip()[:150])
             self.v["fase"].set("Vigilante: " + linea.split("]")[0].split("|")[-1].strip()[:40])
-        if "IDENTIFICADA DESPUÉS" in linea:
-            self.v["cruce"].set(linea.split("IDENTIFICADA DESPUÉS:")[-1].strip()[:160])
+        if "IDENTIFICADA DESPUÉS" in linea or "REORGANIZADA" in linea:
+            self.v["cruce"].set(linea.split(":", 3)[-1].strip()[:160])
         if "Histórico completo" in linea:
             self.v["fase"].set("Histórico completo: pasando a descargar")
 
@@ -258,17 +386,18 @@ class Interfaz:
             while True:
                 linea = self.cola.get_nowait()
                 if linea == "\0FIN":
-                    cod = self.proc.poll() if self.proc else None
-                    self.btn.config(text="INICIAR", bg="#2e7d32")
+                    cod = self.proc.returncode if self.proc else None
+                    self.btn.configure(text="▶  INICIAR", fg_color=VERDE, hover_color=VERDE_H)
+                    self.barra.stop()
+                    self.barra.set(0)
                     if self.estado.get() != "Detenido por ti":
-                        self.estado.set("Terminado" if cod == 0 else f"Terminó con código {cod}")
+                        self._estado("Terminado" if cod == 0 else f"Terminó con código {cod}", VERDE if cod == 0 else ROJO)
                     continue
                 self._interpretar(linea)
-                self.texto.insert("end", linea + "\n")
-                self.texto.see("end")
+                self._escribir(linea)
         except queue.Empty:
             pass
-        if self.inicio and self.btn.cget("text") == "DETENER":
+        if self.inicio and self._corriendo():
             self.v["tiempo"].set(str(datetime.now() - self.inicio).split(".")[0])
         self._resumen_indice()
         self.r.after(1000, self.refrescar)
@@ -282,13 +411,15 @@ class Interfaz:
                     a = ix.rango(g)[0]
                     self.v["antiguo"].set(a.strftime("%Y-%m-%d %H:%M") if a else "-")
             if self.v["fotos"].get() in ("-", ""):
-                n = sum(1 for p in RAIZ_EVIDENCIAS.rglob("*") if p.is_file() and p.name != ".gitkeep")
+                n = sum(1 for p in RAIZ_EVIDENCIAS.rglob("*") if p.is_file() and p.suffix.lower() in (".jpg", ".jpeg", ".png", ".mp4", ".mov"))
                 self.v["fotos"].set(f"{n} archivos en data/Evidencias_WhatsApp")
         except Exception:  # noqa: BLE001 - el índice puede estar bloqueado un instante
             pass
 
 
 if __name__ == "__main__":
-    raiz = tk.Tk()
+    ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("blue")
+    raiz = ctk.CTk()
     Interfaz(raiz)
     raiz.mainloop()

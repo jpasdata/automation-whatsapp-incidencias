@@ -60,3 +60,12 @@ def test_ventana_propia_por_grupo():
     cfg = SimpleNamespace(matching=SimpleNamespace(ventana_minutos_por_grupo={"Oeste": 75}, ventana_minutos_mensaje_separado=45))
     assert ventana_texto_de_grupo(cfg, "Incidencias CFFM-MECOPT(Oeste)") == 75
     assert ventana_texto_de_grupo(cfg, "CFFM_Veraguas_Sea_Central-Reporte de videos") == 45
+
+
+def test_aviso_escrito_en_el_texto_libre_del_excel():
+    from src.excel_manager import extraer_avisos
+
+    assert extraer_avisos("sector sin luz  aviso  5628218", None) == ("5628218",)
+    assert extraer_avisos("F 17739- AVISO 563-0350", "sin luz 5628387") == ("5630350", "5628387")
+    assert extraer_avisos("aviso 5628218", excluir="5628218") == ()
+    assert extraer_avisos("telefono 5551234567 y 1170118") == ()  # no son avisos (más dígitos / no empiezan en 56-57)

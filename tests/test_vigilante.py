@@ -44,3 +44,29 @@ def test_manifiesto_por_dia(tmp_path):
         assert escribir_manifiestos(ix, "G", [cruce], tmp_path, datetime(2026, 10, 1)) == 1
         csv_ = next(tmp_path.rglob("manifiesto_2026-10-09.csv")).read_text(encoding="utf-8-sig")
         assert "011600000001" in csv_ and "mismo_mensaje" in csv_ and "pendiente" in csv_
+
+
+def test_hueco_se_detecta_solo_si_lo_leido_no_se_empalma_con_lo_conocido():
+    from src.vigilante import hay_hueco
+
+    leidos = [_msg("n1"), _msg("n2")]
+    assert hay_hueco(leidos, {"viejo1", "viejo2"}) is True            # nada conocido en pantalla: hubo un hueco
+    assert hay_hueco(leidos, {"n2", "viejo"}) is False                # se empalma
+    assert hay_hueco(leidos, set()) is False                          # primera vez: no hay con qué empalmar
+    assert hay_hueco([], {"viejo"}) is False
+
+
+def test_estado_guardado_permite_saber_donde_quedo(tmp_path):
+    from types import SimpleNamespace
+
+    from src.vigilante import Vigilante
+
+    cfg = SimpleNamespace(logging=SimpleNamespace(carpeta_logs=str(tmp_path)))
+    v = Vigilante(cfg, ["G"], lambda: None, ruta_indice=tmp_path / "i.sqlite3")
+    with Indice(tmp_path / "i.sqlite3") as ix:
+        ix.guardar("G", [_msg("m1")])
+        v._guardar_estado("G", ix, "nuevos=1 bajados=2", 3)
+    import json
+
+    e = json.loads((tmp_path / "vigilante_estado.json").read_text(encoding="utf-8"))["G"]
+    assert e["ultimo_mensaje_indexado"] == "2026-10-09T14:05" and e["mensajes_en_indice"] == 1 and e["pendientes_por_bajar"] == 3

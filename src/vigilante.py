@@ -18,6 +18,7 @@ citando una foto llegan con mediana de 23 min y hasta ~4,5 h; los textos del mis
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import random
 import re
@@ -35,10 +36,16 @@ from .excel_manager import ExcelManager
 from .indice import Indice
 from .matcher import asociar_mensajes
 from .busqueda import cruces_de_grupo
-from .whatsapp_reader import cargar_hacia_arriba, leer_mensajes_recientes
+from .modelos import Mensaje
+from .whatsapp_reader import cargar_hacia_arriba, cosechar, leer_mensajes_recientes
 from .whatsapp_session import SesionWhatsApp
 
 logger = logging.getLogger("incidencias_wa")
+
+
+def hay_hueco(recientes: list[Mensaje], conocidos: set[str]) -> bool:
+    """True si lo leído NO se empalma con lo ya indexado: llegaron más mensajes de los que caben en pantalla mientras no se miraba."""
+    return bool(conocidos) and bool(recientes) and not any(m.id_mensaje in conocidos for m in recientes)
 
 
 def carpeta_sin_cruce(c: ResultadoCruce) -> str:
@@ -138,6 +145,8 @@ class Vigilante:
         self.ventana_horas, self.espera_huerfana_h, self.intervalo_seg = ventana_horas, espera_huerfana_h, intervalo_seg
         self.todo, self.raiz, self.ruta_indice = todo, raiz, ruta_indice or RUTA_INDICE
         self.ponerse_al_dia = ponerse_al_dia
+        self._arranque: set[str] = set()
+        self.ruta_estado = Path(cfg.logging.carpeta_logs) / "vigilante_estado.json"
         self.excel_vivo = excel_vivo
         self._al_dia: set[str] = set()
         self.excel: ExcelManager | None = None
@@ -161,9 +170,32 @@ class Vigilante:
         sesion.abrir_chat(grupo)
         pagina = sesion.pagina
         pagina.wait_for_timeout(random.randint(1500, 3500))
+        primera = grupo not in self._arranque
+        self._arranque.add(grupo)
         conocidos = indice.ids(grupo)
+        ultimo_previo = indice.rango(grupo)[1]
+        if primera:
+            if ultimo_previo:
+                horas = (datetime.now() - ultimo_previo).total_seconds() / 3600
+                logger.info("[%s] REANUDANDO: el último mensaje indexado es de %s (hace %.1f h) y hay %d mensajes ya conocidos; se sigue desde ahí "
+                            "y se vuelve a cruzar todo lo reciente.", grupo[:30], ultimo_previo, horas, len(conocidos))
+                eventos.evento(grupo, "vigilante", "reanudando", "ok", f"ultimo={ultimo_previo:%Y-%m-%d %H:%M} ausente_h={horas:.1f}")
+                desde_cruce = min(desde_cruce, ultimo_previo - timedelta(hours=24))
+            else:
+                logger.info("[%s] PRIMERA VEZ: no hay nada indexado de este grupo; se empieza con lo que se vea ahora.", grupo[:30])
         recientes = leer_mensajes_recientes(pagina, max_pasos=40, intentos_tope=0, ids_conocidos=conocidos or None)
+        hueco = hay_hueco(recientes, conocidos)
         nuevos = indice.guardar(grupo, recientes)
+        hueco_cerrado = False
+        if hueco:
+            logger.warning("[%s] HUECO: lo leído no se empalma con lo indexado (último conocido %s): llegaron más mensajes de los que caben "
+                           "en pantalla mientras no se miraba.", grupo[:30], ultimo_previo)
+            eventos.evento(grupo, "vigilante", "hueco_detectado", "aviso", f"ultimo_conocido={ultimo_previo}")
+            if self.ponerse_al_dia:
+                nuevos += self._cerrar_hueco(pagina, indice, grupo, ultimo_previo)
+                hueco_cerrado = True
+            else:
+                logger.warning("[%s] HUECO SIN CERRAR (--sin-mouse): esos mensajes no se leerán. Usa scripts/cargar_historico.py para recuperarlos.", grupo[:30])
         logger.info("[%s] leído: %d mensajes nuevos (índice %d)", grupo[:30], nuevos, indice.contar(grupo))
 
         excel = self._excel_vigente()
@@ -179,7 +211,7 @@ class Vigilante:
                         sum(1 for t in pendientes.values() if t.estado != "sin_cruce" or t.meta.get("fila")),
                         sum(1 for t in pendientes.values() if "_sin_numero" in t.carpeta.parts),
                         sum(1 for t in pendientes.values() if "_otras_incidencias" in t.carpeta.parts))
-            ok, mal = descargar_visibles(pagina, pendientes, indice, grupo, max_pasos=120)
+            ok, mal = descargar_visibles(pagina, pendientes, indice, grupo, max_pasos=900 if hueco_cerrado else 120)
             bajados, fallidos = ok, mal
             hechas = {i for i, (est, _) in indice.estado_descarga(grupo).items() if est is not None}
             pendientes = {i: t for i, t in pendientes.items() if i not in hechas}
@@ -208,9 +240,63 @@ class Vigilante:
                    f"esperando_comentario={esperando} huerfanas(>{self.espera_huerfana_h:g}h)={huerfanas} ({time.time() - t0:.0f}s)")
         logger.info("[%s] VUELTA: %s", grupo[:30], resumen)
         eventos.evento(grupo, "vigilante", "vuelta", "ok", resumen)
+        self._guardar_estado(grupo, indice, resumen, len(pendientes) if pendientes else 0)
         if self.excel_vivo is not None:  # Excel en tiempo real: se reescribe cuando hubo algo nuevo
             self.excel_vivo.actualizar(indice, excel, forzar=bool(nuevos or bajados or movidos))
         return {"nuevos": nuevos, "bajados": bajados, "fallidos": fallidos, "movidos": movidos, "huerfanas": huerfanas}
+
+    def _cerrar_hueco(self, pagina, indice: Indice, grupo: str, ultimo_previo: datetime | None) -> int:
+        """Sube como una persona (rueda real) hasta empalmar con lo ya indexado, guardando cada tanda."""
+        conocidos = indice.ids(grupo)
+        total = 0
+        logger.info("[%s] CERRANDO EL HUECO: subiendo con el mouse hasta empalmar con lo indexado (no lo toques unos minutos).", grupo[:30])
+
+        def guardar_tanda() -> None:
+            nonlocal total
+            ms = cosechar(pagina, ids_conocidos=conocidos or None, espera_paso_ms=350)
+            n = indice.guardar(grupo, ms)
+            total += n
+            conocidos.update(m.id_mensaje for m in ms if m.id_mensaje)
+            logger.info("[%s]   tanda del hueco: %d mensajes nuevos", grupo[:30], n)
+
+        desde = (ultimo_previo or datetime.now()) - timedelta(hours=1)
+        st = cargar_hacia_arriba(pagina, desde=desde, max_seg=1500, rueda_real=True, al_tanda=guardar_tanda)
+        ms = cosechar(pagina, ids_conocidos=conocidos or None)
+        total += indice.guardar(grupo, ms)
+        logger.info("[%s] hueco cerrado: %d mensajes recuperados (%s)", grupo[:30], total, st)
+        eventos.evento(grupo, "vigilante", "hueco_cerrado", "ok", f"recuperados={total}")
+        return total
+
+    def _guardar_estado(self, grupo: str, indice: Indice, resumen: str, pendientes: int) -> None:
+        """logs/vigilante_estado.json: dónde quedó cada grupo (para saber por dónde seguir y poder revisarlo a mano)."""
+        try:
+            estado = json.loads(self.ruta_estado.read_text(encoding="utf-8")) if self.ruta_estado.exists() else {}
+        except (OSError, ValueError):
+            estado = {}
+        primero, ultimo = indice.rango(grupo)
+        estado[grupo] = {
+            "ultimo_mensaje_indexado": ultimo.isoformat(timespec="minutes") if ultimo else None,
+            "mensaje_mas_antiguo": primero.isoformat(timespec="minutes") if primero else None,
+            "mensajes_en_indice": indice.contar(grupo), "ultima_vuelta": datetime.now().isoformat(timespec="seconds"),
+            "pendientes_por_bajar": pendientes, "resumen_ultima_vuelta": resumen,
+        }
+        try:
+            self.ruta_estado.parent.mkdir(parents=True, exist_ok=True)
+            self.ruta_estado.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _mostrar_estado_guardado(self) -> None:
+        if not self.ruta_estado.exists():
+            logger.info("VIGILANTE: no hay estado guardado de una corrida anterior (primera vez).")
+            return
+        try:
+            estado = json.loads(self.ruta_estado.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        for g, e in estado.items():
+            logger.info("VIGILANTE - última vez en '%s': vuelta %s | último mensaje indexado %s | %s mensajes | pendientes por bajar: %s",
+                        g[:34], e.get("ultima_vuelta"), e.get("ultimo_mensaje_indexado"), e.get("mensajes_en_indice"), e.get("pendientes_por_bajar"))
 
     # --- bucle principal ---------------------------------------------------------------------------
     def correr(self, detener: Callable[[], bool] = lambda: False, max_vueltas: int | None = None) -> None:
@@ -219,6 +305,7 @@ class Vigilante:
         logger.info("VIGILANTE iniciado: grupos=%s, cruza las últimas %g h, espera %g h antes de dar por huérfana una foto sin número.",
                     self.grupos, self.ventana_horas, self.espera_huerfana_h)
         eventos.evento("-", "vigilante", "inicio", "ok", f"grupos={self.grupos}")
+        self._mostrar_estado_guardado()
         while not detener() and (max_vueltas is None or vuelta < max_vueltas):
             try:
                 with Indice(self.ruta_indice) as indice, SesionWhatsApp(

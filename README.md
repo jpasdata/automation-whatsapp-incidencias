@@ -16,7 +16,7 @@ fotos y videos** (organizados por día y por aviso/incidencia), **los cruza cont
 
 | Modo | Comando | Cuándo usarlo |
 |---|---|---|
-| **Vigilante** (todo el día) | `python scripts/vigilante.py --todos` | Lo normal: sesión siempre abierta, baja todo lo que llega, reubica fotos identificadas horas después. **No usa el mouse.** |
+| **Vigilante** (todo el día) | `python scripts/vigilante.py --todos` | Lo normal: sesión siempre abierta, baja todo lo que llega, reubica fotos identificadas horas después. **Si se detiene y se vuelve a activar, reanuda donde quedó** (índice + `logs/vigilante_estado.json`); si llegaron más mensajes de los que caben en pantalla mientras estuvo apagado, sube unos minutos con el mouse para cerrar el hueco (`--sin-mouse` lo evita). |
 | Histórico | `python scripts/cargar_historico.py --todos --desde 2026-10-01 --descargar` | Una vez, para traer lo anterior. **Usa el mouse real** (no tocarlo). |
 | Solo actualizar lo nuevo | `python scripts/actualizar.py` | Lectura rápida de lo último, sin descargar. |
 | Reorganizar lo ya bajado | `python scripts/reorganizar_descargas.py` | Tras cambiar el Excel o las reglas; no abre WhatsApp. |

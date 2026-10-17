@@ -29,7 +29,8 @@ from src.vigilante import Vigilante  # noqa: E402
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="fragmento del título del grupo")
 ap.add_argument("--todos", action="store_true", help="todos los grupos de config.yaml")
-ap.add_argument("--ponerse-al-dia", action="store_true", help="al iniciar, subir con el mouse (una vez por grupo) para bajar lo de las últimas horas que ya no está en pantalla; NO tocar el mouse mientras tanto")
+ap.add_argument("--sin-mouse", action="store_true", help="NO subir con el mouse para cerrar huecos (si el bot estuvo apagado y llegaron más mensajes de los que caben en pantalla, esos mensajes se perderían). Por defecto, si hay hueco, sube unos minutos con el mouse")
+ap.add_argument("--ponerse-al-dia", action="store_true", help="(ya es el comportamiento por defecto; se deja por compatibilidad)")
 ap.add_argument("--solo-cruzadas", action="store_true", help="no bajar lo que no cruza con el Excel")
 ap.add_argument("--ventana-horas", type=float, default=48, help="cuántas horas atrás se vuelve a cruzar (default 48)")
 ap.add_argument("--espera-huerfana-horas", type=float, default=6, help="horas de espera de un comentario antes de dar por huérfana una foto sin número (default 6)")
@@ -70,7 +71,7 @@ logger.info("Excel en vivo: %s y %s (se reescriben solos cuando hay novedades)."
 try:
     with candado_sesion():
         Vigilante(cfg, grupos, crear_excel, ventana_horas=args.ventana_horas, espera_huerfana_h=args.espera_huerfana_horas,
-                  intervalo_seg=(lo, hi), todo=not args.solo_cruzadas, ponerse_al_dia=args.ponerse_al_dia, excel_vivo=vivo).correr()
+                  intervalo_seg=(lo, hi), todo=not args.solo_cruzadas, ponerse_al_dia=not args.sin_mouse, excel_vivo=vivo).correr()
 except SesionOcupada as e:
     sys.exit(str(e))
 except KeyboardInterrupt:

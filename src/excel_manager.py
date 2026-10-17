@@ -80,6 +80,20 @@ def categorizar_nota_evidencia(nota: str | None) -> str:
     return "revisar_manual"
 
 
+PATRON_AVISO_LIBRE = re.compile(r"(?<!\d)(5[67]\d)-?(\d{4})(?!\d)")
+
+
+def extraer_avisos(*textos, excluir: str | None = None) -> tuple[str, ...]:
+    """Números de aviso (7 dígitos que empiezan en 56/57) escritos en texto libre; sin repetir y sin el que ya está en NUMERO AVISO."""
+    vistos: list[str] = []
+    for t in textos:
+        for a, b in PATRON_AVISO_LIBRE.findall(str(t or "")):
+            n = a + b
+            if n != excluir and n not in vistos:
+                vistos.append(n)
+    return tuple(vistos)
+
+
 def extraer_numero_elemento(observaciones: str | None) -> str | None:
     """
     Busca un número de elemento dentro del texto libre de Observaciones.
@@ -107,6 +121,7 @@ class FilaIncidencia:
     nota_evidencia_manual: str | None
     categoria_nota_manual: str
     provincia: str | None = None  # normalizada (sin tildes, mayúsculas)
+    avisos_extra: tuple[str, ...] = ()  # avisos escritos en Observaciones/Descripcion/EVIDENCIA (la columna NUMERO AVISO suele estar vacía)
     hoja: str = ""  # "" = hoja principal; si no, el nombre de la hoja adicional de donde salió la fila
 
 
@@ -150,6 +165,7 @@ class ExcelManager:
         self._ws: Worksheet | None = None
         self._ws_valores: Worksheet | None = None
         self._idx_por_nombre: dict[str, int] = {}
+        self._filas_cache: list | None = None
 
     @classmethod
     def desde_config(cls, ruta_archivo: str, e) -> "ExcelManager":
@@ -176,6 +192,7 @@ class ExcelManager:
         self._mapear_columnas()
         self._asegurar_columnas_nuevas()
         self._abrir_hojas_extra(wb_valores)
+        self._filas_cache = None
 
     def _abrir_hojas_extra(self, wb_valores) -> None:
         """
@@ -249,6 +266,8 @@ class ExcelManager:
         """Devuelve todas las filas de datos ya normalizadas."""
         if self._ws is None:
             raise ExcelManagerError("Llama a abrir() antes de leer_filas().")
+        if self._filas_cache is not None:  # leer el Excel celda por celda es lento y se pide muchas veces por cruce
+            return self._filas_cache
 
         filas: list[FilaIncidencia] = []
         col_largo = self._idx_por_nombre[self.columna_codigo_largo]
@@ -275,6 +294,8 @@ class ExcelManager:
                     nota_evidencia_manual=nota,
                     categoria_nota_manual=categorizar_nota_evidencia(nota),
                     provincia=normalizar_texto(self._valor(fila_num, self.columna_provincia)),
+                    avisos_extra=extraer_avisos(observaciones, self._valor(fila_num, "Descripcion"), nota,
+                                                excluir=self._normalizar_identificador(self._valor(fila_num, self.columna_numero_aviso))),
                 )
             )
         vistos = {f.codigo_largo for f in filas} | {f.codigo_corto for f in filas if f.codigo_corto}
@@ -299,7 +320,10 @@ class ExcelManager:
                     fecha_deteccion=val(fila_num, self.columna_fecha_deteccion), fecha_sr=val(fila_num, self.columna_fecha_sr),
                     nota_evidencia_manual=nota, categoria_nota_manual=categorizar_nota_evidencia(nota),
                     provincia=normalizar_texto(val(fila_num, self.columna_provincia)), hoja=nombre,
+                    avisos_extra=extraer_avisos(observaciones, val(fila_num, "Descripcion"), nota,
+                                                excluir=self._normalizar_identificador(val(fila_num, self.columna_numero_aviso))),
                 ))
+        self._filas_cache = filas
         return filas
 
     @staticmethod
@@ -370,7 +394,7 @@ class ExcelManager:
         if numero_aviso:
             numero_aviso = numero_aviso.strip()
             for fila in filas:
-                if fila.numero_aviso and fila.numero_aviso == numero_aviso:
+                if (fila.numero_aviso and fila.numero_aviso == numero_aviso) or numero_aviso in fila.avisos_extra:
                     return fila, CriterioBusqueda.NUMERO_AVISO
 
         return None, CriterioBusqueda.NO_ENCONTRADO
