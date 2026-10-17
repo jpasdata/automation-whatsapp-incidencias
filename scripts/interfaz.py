@@ -79,7 +79,7 @@ class Interfaz:
         self.btn = tk.Button(botones, text="INICIAR", font=("Segoe UI", 14, "bold"), bg="#2e7d32", fg="white", width=12, command=self.alternar)
         self.btn.pack(side="left")
         for texto, cmd in (("Verificar entorno", self.verificar_entorno), ("Estado de descargas", self.ver_estado_descargas), ("Generar reporte Excel", self.generar_reporte),
-                           ("Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS)), ("Abrir logs", lambda: os.startfile(RAIZ / "logs"))):
+                           ("Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS)), ("Abrir Excel en vivo", self.abrir_excel_vivo), ("Abrir logs", lambda: os.startfile(RAIZ / "logs"))):
             tk.Button(botones, text=texto, font=("Segoe UI", 10), command=cmd).pack(side="left", padx=5)
         self.al_dia = tk.BooleanVar(value=False)
         ttk.Checkbutton(botones, text="Vigilante: ponerse al día al iniciar (usa el mouse)", variable=self.al_dia).pack(side="left", padx=8)
@@ -126,6 +126,14 @@ class Interfaz:
 
     def ver_estado_descargas(self) -> None:
         self._mostrar(resumen_descargas())
+
+    def abrir_excel_vivo(self) -> None:
+        """Abre el Excel cruzado que el bot reescribe solo (data/Reportes/RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx)."""
+        ruta = RAIZ / "data" / "Reportes" / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
+        if ruta.exists():
+            os.startfile(ruta)
+        else:
+            self.estado.set("Aún no hay Excel en vivo: se crea con la primera vuelta/cruce")
 
     def generar_reporte(self) -> None:
         """Genera el reporte Excel con formato a partir de lo indexado y descargado (no abre WhatsApp)."""

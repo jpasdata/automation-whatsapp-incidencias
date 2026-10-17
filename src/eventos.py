@@ -28,6 +28,12 @@ def registrar_csv(nombre: str, fila: dict) -> None:
         fila = {"ts": datetime.now().isoformat(timespec="seconds"), **fila}
         with _lock:
             nuevo = not ruta.exists() or ruta.stat().st_size == 0
+            if not nuevo:
+                with open(ruta, newline="", encoding="utf-8-sig") as f:
+                    encabezado = next(csv.reader(f), [])
+                if encabezado != list(fila):  # cambió el formato: se archiva el viejo para no mezclar columnas
+                    ruta.rename(ruta.with_name(f"{ruta.stem}_{datetime.now():%Y%m%d_%H%M%S}{ruta.suffix}"))
+                    nuevo = True
             with open(ruta, "a", newline="", encoding="utf-8-sig") as f:
                 w = csv.DictWriter(f, fieldnames=list(fila), extrasaction="ignore")
                 if nuevo:

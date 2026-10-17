@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import eventos  # noqa: E402
 from src.config import load_config, provincias_de_grupo, resolver_cargar_desde  # noqa: E402
+from src.excel_vivo import ExcelEnVivo  # noqa: E402
 from src.historico import RUTA_INDICE, cargar_historico, verificar_historico  # noqa: E402
 from src.indice import Indice  # noqa: E402
 from src.logger import setup_logger  # noqa: E402
@@ -86,6 +87,7 @@ if args.descargar:
     excel.abrir()
     logger.info("Excel cargado (copia de trabajo): %s", cfg.excel.ruta_archivo)
 
+vivo = ExcelEnVivo(cfg, desde, grupos_cfg) if excel is not None else None
 resultados = []
 for n, grupo in enumerate(grupos, 1):
     logger.info("##### Grupo %d/%d: %s #####", n, len(grupos), grupo)
@@ -97,7 +99,7 @@ for n, grupo in enumerate(grupos, 1):
         provincias = provincias_de_grupo(cfg, grupo)
         logger.info("Provincias del Excel para este grupo: %s", sorted(provincias) if provincias else "(sin filtro: cruza contra todo)")
         fabrica = lambda indice, g=grupo, p=provincias: Descargador(  # noqa: E731
-            cfg, excel, indice, g, p, desde, todo=args.todo, descarga_durante=args.descarga_durante)
+            cfg, excel, indice, g, p, desde, todo=args.todo, descarga_durante=args.descarga_durante, excel_vivo=vivo)
     try:
         cargar_historico(cfg, grupo, desde, args.minutos, logger, fabrica_descargador=fabrica)
         resultados.append((grupo, "ok", time.time() - t0))

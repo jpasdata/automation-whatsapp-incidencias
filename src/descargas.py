@@ -239,10 +239,11 @@ class Descargador:
     """
 
     def __init__(self, cfg, excel: ExcelManager, indice: Indice, grupo: str, provincias: set[str] | None,
-                 desde: datetime, raiz: Path = RAIZ_EVIDENCIAS, todo: bool = False, descarga_durante: bool = False):
+                 desde: datetime, raiz: Path = RAIZ_EVIDENCIAS, todo: bool = False, descarga_durante: bool = False, excel_vivo=None):
         self.cfg, self.excel, self.indice, self.grupo = cfg, excel, indice, grupo
         self.provincias, self.desde, self.raiz, self.todo = provincias, desde, raiz, todo
         self.descarga_durante = descarga_durante
+        self.excel_vivo = excel_vivo
         self.total_ok = self.total_mal = 0
         self._plan: dict[str, TareaDescarga] | None = None
         self._cruces: list[ResultadoCruce] = []
@@ -279,6 +280,8 @@ class Descargador:
         resumen = self.resumen_cruce()
         logger.info("%s [cruce %.1fs; por bajar: %d]", resumen, time.time() - t0, len(self._plan))
         eventos.evento(self.grupo, "subida", "cruce_en_vivo", "ok", resumen)
+        if self.excel_vivo is not None:
+            self.excel_vivo.actualizar(self.indice, self.excel)  # throttled: no más de una vez cada ~90 s
         if self.descarga_durante:
             self.en_ciclo(pagina)
 
@@ -320,6 +323,8 @@ class Descargador:
             logger.info("DESCARGA (pasada %d/%d): %d bajados, %d fallidos, %d sin encontrar su burbuja (%.0fs).", n, pasadas, ok, mal, sin, time.time() - t0)
             eventos.evento(self.grupo, "descarga", f"pasada_{n}", "ok" if not (mal or sin) else "con_pendientes",
                            f"bajados={ok} fallidos={mal} sin_burbuja={sin}")
+            if self.excel_vivo is not None:
+                self.excel_vivo.actualizar(self.indice, self.excel, forzar=True)
             if not sin:
                 break
 

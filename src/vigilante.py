@@ -130,13 +130,14 @@ def escribir_manifiestos(indice: Indice, grupo: str, cruces: list[ResultadoCruce
 class Vigilante:
     def __init__(self, cfg, grupos: list[str], crear_excel: Callable[[], ExcelManager], ventana_horas: float = 48,
                  espera_huerfana_h: float = 6, intervalo_seg: tuple[int, int] = (150, 300), todo: bool = True,
-                 raiz: Path = RAIZ_EVIDENCIAS, ruta_indice: Path | None = None, ponerse_al_dia: bool = False):
+                 raiz: Path = RAIZ_EVIDENCIAS, ruta_indice: Path | None = None, ponerse_al_dia: bool = False, excel_vivo=None):
         from .historico import RUTA_INDICE
 
         self.cfg, self.grupos, self.crear_excel = cfg, grupos, crear_excel
         self.ventana_horas, self.espera_huerfana_h, self.intervalo_seg = ventana_horas, espera_huerfana_h, intervalo_seg
         self.todo, self.raiz, self.ruta_indice = todo, raiz, ruta_indice or RUTA_INDICE
         self.ponerse_al_dia = ponerse_al_dia
+        self.excel_vivo = excel_vivo
         self._al_dia: set[str] = set()
         self.excel: ExcelManager | None = None
         self._excel_mtime = 0.0
@@ -211,6 +212,8 @@ class Vigilante:
                    f"esperando_comentario={esperando} huerfanas(>{self.espera_huerfana_h:g}h)={huerfanas} ({time.time() - t0:.0f}s)")
         logger.info("[%s] VUELTA: %s", grupo[:30], resumen)
         eventos.evento(grupo, "vigilante", "vuelta", "ok", resumen)
+        if self.excel_vivo is not None:  # Excel en tiempo real: se reescribe cuando hubo algo nuevo
+            self.excel_vivo.actualizar(indice, excel, forzar=bool(nuevos or bajados or movidos))
         return {"nuevos": nuevos, "bajados": bajados, "fallidos": fallidos, "movidos": movidos, "huerfanas": huerfanas}
 
     # --- bucle principal ---------------------------------------------------------------------------

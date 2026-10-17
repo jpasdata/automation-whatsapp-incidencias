@@ -126,6 +126,13 @@ def analizar_grupo(cfg, excel, indice, grupo: str, desde: datetime) -> dict:
     return {"grupo": grupo, "incidencias": incidencias, "dias": dias, "sin_cruce": sin_cruce, "paquetes": len(cruces)}
 
 
+def _mb(v) -> float:
+    try:
+        return round(float(v or 0) / 1e6, 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _leer_csv(ruta: Path) -> list[dict]:
     if not ruta.exists():
         return []
@@ -133,9 +140,11 @@ def _leer_csv(ruta: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta_salida: Path, carpeta_logs: Path | None = None) -> Path:
+def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta_salida: Path, carpeta_logs: Path | None = None,
+                    analisis: list[dict] | None = None) -> Path:
     carpeta_logs = carpeta_logs or Path(cfg.logging.carpeta_logs)
-    analisis = [analizar_grupo(cfg, excel, indice, g, desde) for g in grupos]
+    if analisis is None:
+        analisis = [analizar_grupo(cfg, excel, indice, g, desde) for g in grupos]
     wb = Workbook()
 
     # ---- Resumen -------------------------------------------------------------------------------
@@ -206,7 +215,7 @@ def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta
     ws = wb.create_sheet("Descargas")
     det = _leer_csv(carpeta_logs / "descargas_detalle.csv")
     filas = [[d.get("ts"), (d.get("grupo") or "")[:30], d.get("dia"), d.get("hora"), d.get("remitente"), d.get("fila"), d.get("codigo"),
-              d.get("origen"), d.get("esperados"), d.get("bajados"), round(float(d.get("bytes") or 0) / 1e6, 2), d.get("segundos"),
+              d.get("origen"), d.get("esperados"), d.get("bajados"), _mb(d.get("bytes")), d.get("segundos"),
               d.get("resultado"), d.get("error"), d.get("carpeta")] for d in det]
     _tabla(ws, 1, ["Cuándo", "Grupo", "Día", "Hora", "Remitente", "Fila", "Código", "Cómo se identificó", "Esperados", "Bajados", "MB",
                    "Segundos", "Resultado", "Error / motivo", "Carpeta"], filas,
@@ -231,3 +240,71 @@ def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta
     ruta_salida.parent.mkdir(parents=True, exist_ok=True)
     wb.save(ruta_salida)
     return ruta_salida
+
+
+def _texto_estado(i: dict) -> str:
+    base = i["estado"]
+    if i["fotos"] or i["videos"]:
+        base += f" | {i['fotos']} foto(s), {i['videos']} video(s)"
+    if i["ultima"]:
+        base += f" | última {i['ultima']:%d/%m %H:%M}"
+    return base
+
+
+def escribir_cruzado(cfg, analisis: list[dict], ruta_original: Path, ruta_salida: Path) -> int:
+    """
+    Copia del Excel de incidencias con el resultado del cruce escrito en las columnas Estado_Automatico y
+    Ruta_Evidencia de CADA fila (hoja principal y hojas adicionales), coloreadas por estado. El original no se toca.
+    Devuelve cuántas filas se escribieron. Los gráficos/imágenes del Excel original no se conservan en esta copia.
+    """
+    from openpyxl import load_workbook
+
+    mejor: dict[tuple[str, int], dict] = {}
+    for a in analisis:
+        for i in a["incidencias"]:
+            clave = (i["hoja"], i["fila"])
+            previo = mejor.get(clave)
+            # una fila "SIN DATOS" aparece en todos los grupos: gana el que sí encontró evidencia
+            if previo is None or (i["paquetes"] > previo["paquetes"]):
+                mejor[clave] = i
+    wb = load_workbook(ruta_original)
+    e = cfg.excel
+    principal = wb[e.nombre_hoja]
+
+    def columnas(ws, crear: bool):
+        idx = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
+        if crear:
+            for nombre in (e.columna_estado_automatico, e.columna_ruta_foto):
+                if nombre not in idx:
+                    idx[nombre] = max(idx.values()) + 1
+                    ws.cell(row=1, column=idx[nombre], value=nombre)
+        return idx
+
+    idx_main = columnas(principal, True)
+    escritas = 0
+    for hoja_nombre in (None, *e.hojas_extra):
+        ws = principal if hoja_nombre is None else (wb[hoja_nombre] if hoja_nombre in wb.sheetnames else None)
+        if ws is None:
+            continue
+        if hoja_nombre is None:
+            idx = idx_main
+        else:
+            idx = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
+            if e.columna_codigo_largo in idx:
+                idx = columnas(ws, True)
+            else:  # sin encabezado: mismas columnas que la hoja principal
+                idx = idx_main
+        clave_hoja = "Asignacion" if hoja_nombre is None else hoja_nombre
+        for (hoja, fila), i in mejor.items():
+            if (hoja or "Asignacion") != clave_hoja:
+                continue
+            celda = ws.cell(row=fila, column=idx[e.columna_estado_automatico], value=_texto_estado(i))
+            _color_estado(celda, i["estado"])
+            ws.cell(row=fila, column=idx[e.columna_ruta_foto], value=i["carpeta"] or None)
+            escritas += 1
+    ruta_salida.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ruta_salida.with_suffix(".tmp.xlsx")
+    wb.save(tmp)
+    import os
+    os.replace(tmp, ruta_salida)
+    return escritas

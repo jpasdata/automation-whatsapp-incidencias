@@ -19,8 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import eventos  # noqa: E402
 from src.bloqueo import SesionOcupada, candado_sesion  # noqa: E402
-from src.config import load_config  # noqa: E402
+from src.config import load_config, resolver_cargar_desde  # noqa: E402
 from src.excel_manager import ExcelManager  # noqa: E402
+from src.excel_vivo import ExcelEnVivo  # noqa: E402
 from src.logger import setup_logger  # noqa: E402
 from src.verificador import hay_errores, informe, verificar  # noqa: E402
 from src.vigilante import Vigilante  # noqa: E402
@@ -60,10 +61,16 @@ def crear_excel() -> ExcelManager:
     return x
 
 
+from datetime import datetime  # noqa: E402
+
+_desde = resolver_cargar_desde(cfg.whatsapp.cargar_desde) or datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+vivo = ExcelEnVivo(cfg, _desde, grupos_cfg)
+logger.info("Excel en vivo: %s y %s (se reescriben solos cuando hay novedades).", vivo.ruta_reporte, vivo.ruta_cruzado)
+
 try:
     with candado_sesion():
         Vigilante(cfg, grupos, crear_excel, ventana_horas=args.ventana_horas, espera_huerfana_h=args.espera_huerfana_horas,
-                  intervalo_seg=(lo, hi), todo=not args.solo_cruzadas, ponerse_al_dia=args.ponerse_al_dia).correr()
+                  intervalo_seg=(lo, hi), todo=not args.solo_cruzadas, ponerse_al_dia=args.ponerse_al_dia, excel_vivo=vivo).correr()
 except SesionOcupada as e:
     sys.exit(str(e))
 except KeyboardInterrupt:
