@@ -96,6 +96,11 @@ def cargar_historico(
         cfg.whatsapp.carpeta_sesion, headless=cfg.whatsapp.headless, logger=logger
     ) as sesion:
         sesion.abrir_chat(grupo)
+        from .descargas import RAIZ_EVIDENCIAS
+
+        arregladas = indice.rebasar_rutas(RAIZ_EVIDENCIAS)
+        if arregladas:
+            logger.info("El índice venía de otro PC: se reapuntaron %d rutas de descarga a %s.", arregladas, RAIZ_EVIDENCIAS)
         descargador = fabrica_descargador(indice) if fabrica_descargador else None
         ronda = 0
         try:

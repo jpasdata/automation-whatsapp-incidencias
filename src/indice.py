@@ -131,3 +131,49 @@ class Indice:
 
     def grupos(self) -> list[str]:
         return [r[0] for r in self._con.execute("SELECT DISTINCT grupo FROM mensajes ORDER BY 1")]
+
+    # --- traspaso entre PCs ----------------------------------------------------------------------
+    def rebasar_rutas(self, raiz_evidencias: str | Path) -> int:
+        """
+        Las rutas de descarga se guardan completas, así que al mover el índice a otro PC apuntan a una carpeta que no existe.
+        Esto las reapunta a `raiz_evidencias` conservando lo que hay desde 'Evidencias_WhatsApp' hacia adentro.
+        Devuelve cuántos mensajes se corrigieron.
+        """
+        from pathlib import PureWindowsPath
+
+        raiz = Path(raiz_evidencias)
+        corregidos = 0
+        for grupo, id_, ruta in self._con.execute("SELECT grupo, id, ruta_descarga FROM mensajes WHERE ruta_descarga IS NOT NULL AND ruta_descarga<>''").fetchall():
+            nuevas = []
+            for r in ruta.split(";"):
+                partes = PureWindowsPath(r).parts
+                if "Evidencias_WhatsApp" in partes:
+                    r = str(raiz.joinpath(*partes[partes.index("Evidencias_WhatsApp") + 1:]))
+                nuevas.append(r)
+            if ";".join(nuevas) != ruta:
+                self._con.execute("UPDATE mensajes SET ruta_descarga=? WHERE grupo=? AND id=?", (";".join(nuevas), grupo, id_))
+                corregidos += 1
+        self._con.commit()
+        return corregidos
+
+    def fusionar(self, ruta_otro: str | Path) -> dict[str, int]:
+        """
+        Mezcla otro índice (el de otro PC) en este: agrega los mensajes que no estaban y, si aquí un mensaje no tiene estado de
+        descarga y allá sí, toma el de allá. Lo que ya está aquí NO se pisa.
+        """
+        self._con.execute("ATTACH DATABASE ? AS otro", (str(ruta_otro),))
+        try:
+            antes = self._con.execute("SELECT COUNT(*) FROM mensajes").fetchone()[0]
+            self._con.execute(
+                "INSERT OR IGNORE INTO mensajes (grupo,id,ts,pos,remitente,texto,n_adjuntos,tipo_adjunto,cita_autor,cita_texto,leido_en,estado_descarga,ruta_descarga)"
+                " SELECT grupo,id,ts,pos,remitente,texto,n_adjuntos,tipo_adjunto,cita_autor,cita_texto,leido_en,estado_descarga,ruta_descarga FROM otro.mensajes")
+            nuevos = self._con.execute("SELECT COUNT(*) FROM mensajes").fetchone()[0] - antes
+            cur = self._con.execute(
+                "UPDATE mensajes SET estado_descarga=(SELECT o.estado_descarga FROM otro.mensajes o WHERE o.grupo=mensajes.grupo AND o.id=mensajes.id),"
+                " ruta_descarga=(SELECT o.ruta_descarga FROM otro.mensajes o WHERE o.grupo=mensajes.grupo AND o.id=mensajes.id)"
+                " WHERE estado_descarga IS NULL AND EXISTS (SELECT 1 FROM otro.mensajes o WHERE o.grupo=mensajes.grupo AND o.id=mensajes.id AND o.estado_descarga IS NOT NULL)")
+            estados = cur.rowcount
+            self._con.commit()
+        finally:
+            self._con.execute("DETACH DATABASE otro")
+        return {"mensajes_nuevos": nuevos, "estados_de_descarga_tomados": estados}

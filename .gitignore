@@ -19,3 +19,7 @@ logs/*
 !logs/.gitkeep
 
 data/Reportes/
+
+# traspasos entre PCs (contienen evidencias e índice)
+data/Traspasos/
+*.zip

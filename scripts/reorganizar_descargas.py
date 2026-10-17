@@ -44,6 +44,9 @@ excel.abrir()
 m = cfg.matching
 
 with Indice(RUTA_INDICE) as indice:
+    _n = indice.rebasar_rutas(RAIZ_EVIDENCIAS)
+    if _n:
+        logger.info("El índice venía de otro PC: se reapuntaron %d rutas de descarga.", _n)
     for grupo in indice.grupos():
         descargas = indice.estado_descarga(grupo)
         ok = {i: r for i, (e, r) in descargas.items() if e == "ok" and r}

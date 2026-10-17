@@ -16,7 +16,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 try:
     import customtkinter as ctk
@@ -100,6 +100,8 @@ class Interfaz:
         seccion("Mantenimiento")
         boton("🧹  Limpiar y ordenar", self.limpiar)
         boton("⬇  Actualizar desde GitHub", self.actualizar_proyecto)
+        boton("📦  Exportar traspaso a otro PC", self.exportar_traspaso)
+        boton("📥  Importar traspaso", self.importar_traspaso)
 
         pie = ctk.CTkFrame(lat, fg_color="transparent")
         pie.pack(side="bottom", fill="x", padx=18, pady=16)
@@ -299,6 +301,31 @@ class Interfaz:
             return
         subprocess.Popen(["cmd", "/c", "start", "Actualizar proyecto", str(RAIZ / "Actualizar_proyecto.bat")], cwd=RAIZ)
         self.r.after(500, self.r.destroy)
+
+    def exportar_traspaso(self) -> None:
+        """Crea un .zip con índice, evidencias y estado para continuar en otro PC (data/Traspasos/)."""
+        self._estado("Creando traspaso…", AZUL)
+        self.r.update_idletasks()
+        p = self._ejecutar(["scripts/traspaso.py", "exportar"])
+        self._mostrar((p.stdout + p.stderr).strip())
+        self._estado("Traspaso listo (data/Traspasos)" if p.returncode == 0 else "Error al crear el traspaso", VERDE if p.returncode == 0 else ROJO)
+        if p.returncode == 0:
+            os.startfile(RAIZ / "data" / "Traspasos")
+
+    def importar_traspaso(self) -> None:
+        """Elige un .zip de traspaso y lo mezcla en este PC (índice, evidencias y rutas); respalda lo que había."""
+        if self._corriendo():
+            messagebox.showwarning("Importar traspaso", "Detén primero el bot (botón DETENER) y vuelve a intentar.")
+            return
+        ruta = filedialog.askopenfilename(title="Elige el .zip de traspaso", filetypes=[("Traspaso", "*.zip")])
+        if not ruta:
+            return
+        con_excel = messagebox.askyesno("Importar traspaso", "¿Reemplazar también el Excel de incidencias por el del traspaso?\n(se deja copia del actual)")
+        self._estado("Importando traspaso…", AZUL)
+        self.r.update_idletasks()
+        p = self._ejecutar(["scripts/traspaso.py", "importar", ruta, *(["--excel"] if con_excel else [])])
+        self._mostrar((p.stdout + p.stderr).strip())
+        self._estado("Traspaso importado" if p.returncode == 0 else "Error al importar el traspaso", VERDE if p.returncode == 0 else ROJO)
 
     def generar_reporte(self) -> None:
         """Genera el reporte Excel con formato a partir de lo indexado y descargado (no abre WhatsApp)."""

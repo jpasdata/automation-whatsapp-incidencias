@@ -311,6 +311,9 @@ class Vigilante:
                 with Indice(self.ruta_indice) as indice, SesionWhatsApp(
                     self.cfg.whatsapp.carpeta_sesion, headless=self.cfg.whatsapp.headless, logger=logger
                 ) as sesion:
+                    arregladas = indice.rebasar_rutas(self.raiz)
+                    if arregladas:
+                        logger.info("El índice venía de otro PC: se reapuntaron %d rutas de descarga a %s.", arregladas, self.raiz)
                     while not detener() and (max_vueltas is None or vuelta < max_vueltas):
                         vuelta += 1
                         for grupo in self.grupos:
