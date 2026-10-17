@@ -61,6 +61,7 @@ def asociar_mensajes(
     ventana_minutos: int = 15,
     patron_elemento: str | None = PATRON_ELEMENTO_DEFECTO,
     ventana_rafaga_minutos: float = 2,
+    ventana_ajena_minutos: float = 0,
 ) -> list[ResultadoMatch]:
     """
     Devuelve un ResultadoMatch por cada mensaje con adjunto. Prioridad:
@@ -72,7 +73,9 @@ def asociar_mensajes(
       4. Ráfaga: foto suelta del mismo remitente a <= `ventana_rafaga_minutos`
          de otra foto que sí quedó con número (en el campo mandan varias fotos
          sueltas seguidas y solo una lleva el pie) -> RAFAGA.
-      5. SIN_CODIGO.
+      5. Comentario de OTRA persona con número a <= `ventana_ajena_minutos` (0 = desactivado) -> COMENTARIO_AJENO
+         (probable: se marca para revisar, no es tan fiable como lo anterior).
+      6. SIN_CODIGO.
 
     Un mismo texto puede servir a varias fotos seguidas (es común mandar
     2-3 fotos de la misma incidencia con el número escrito una sola vez).
@@ -108,7 +111,35 @@ def asociar_mensajes(
                 resultados.append(_resultado(msg, *cercano))
             else:
                 resultados.append(ResultadoMatch(mensaje=msg, codigo=None, origen=TipoOrigenMatch.SIN_CODIGO))
-    return _aplicar_rafagas(resultados, timedelta(minutes=ventana_rafaga_minutos))
+    resultados = _aplicar_rafagas(resultados, timedelta(minutes=ventana_rafaga_minutos))
+    if ventana_ajena_minutos:
+        resultados = _aplicar_comentarios_ajenos(resultados, ms, candidatos, ventana_ajena_minutos)
+    return resultados
+
+
+def _aplicar_comentarios_ajenos(
+    resultados: list[ResultadoMatch], ms: list[Mensaje], candidatos: list[list[str]], ventana_minutos: float
+) -> list[ResultadoMatch]:
+    """Fotos todavía sin número: si OTRA persona escribió un número (texto sin adjunto, que no responde a otro paquete) a <= ventana, se propone."""
+    pos = {id(m): i for i, m in enumerate(ms)}
+    ventana = timedelta(minutes=ventana_minutos)
+    nuevos: list[ResultadoMatch] = []
+    for r in resultados:
+        if r.origen != TipoOrigenMatch.SIN_CODIGO:
+            nuevos.append(r)
+            continue
+        i = pos[id(r.mensaje)]
+        opciones = [
+            (abs(ms[j].timestamp - r.mensaje.timestamp), j) for j in range(len(ms))
+            if ms[j].remitente != r.mensaje.remitente and not ms[j].tiene_adjunto and candidatos[j] and not ms[j].cita_autor
+            and abs(ms[j].timestamp - r.mensaje.timestamp) <= ventana
+        ]
+        if not opciones:
+            nuevos.append(r)
+            continue
+        _, j = min(opciones, key=lambda t: (t[0], t[1]))
+        nuevos.append(ResultadoMatch(mensaje=r.mensaje, codigo=candidatos[j][0], origen=TipoOrigenMatch.COMENTARIO_AJENO, candidatos=list(candidatos[j])))
+    return nuevos
 
 
 def _aplicar_rafagas(resultados: list[ResultadoMatch], ventana: timedelta) -> list[ResultadoMatch]:

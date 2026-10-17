@@ -34,6 +34,7 @@ from .descargas import RAIZ_EVIDENCIAS, TareaDescarga, slug_grupo, descargar_vis
 from .excel_manager import ExcelManager
 from .indice import Indice
 from .matcher import asociar_mensajes
+from .busqueda import cruces_de_grupo
 from .whatsapp_reader import cargar_hacia_arriba, leer_mensajes_recientes
 from .whatsapp_session import SesionWhatsApp
 
@@ -113,7 +114,7 @@ def escribir_manifiestos(indice: Indice, grupo: str, cruces: list[ResultadoCruce
         por_dia.setdefault(f"{m.timestamp:%Y-%m-%d}", []).append([
             m.timestamp.strftime("%H:%M"), etiqueta_identificador(c) or "(sin número)", m.remitente, m.n_adjuntos, (m.texto or "").replace("\n", " ")[:160],
             c.estado, c.fila.fila_excel if c.fila else "", (c.fila.codigo_largo or c.fila.codigo_corto) if c.fila else "",
-            c.numero or "", c.criterio.value if c.criterio else "", c.match.origen.value, ", ".join(c.match.candidatos),
+            c.numero or "", c.criterio.value if c.criterio else "", c.match.origen.value + (" +aprendido" if c.aprendido else ""), ", ".join(c.match.candidatos),
             est or "pendiente", ruta or "", m.id_mensaje,
         ])
     for dia, filas in por_dia.items():
@@ -165,13 +166,8 @@ class Vigilante:
         nuevos = indice.guardar(grupo, recientes)
         logger.info("[%s] leído: %d mensajes nuevos (índice %d)", grupo[:30], nuevos, indice.contar(grupo))
 
-        m = self.cfg.matching
         excel = self._excel_vigente()
-        provincias = provincias_de_grupo(self.cfg, grupo)
-        mensajes = indice.mensajes(grupo)
-        resultados = [r for r in asociar_mensajes(mensajes, m.patron_codigo_regex, m.ventana_minutos_mensaje_separado, m.patron_elemento_regex)
-                      if r.mensaje.timestamp >= desde_cruce and r.mensaje.n_adjuntos > 0]
-        cruces = cruzar(resultados, excel, m.margen_horas_evidencia, provincias)
+        cruces = cruces_de_grupo(self.cfg, excel, indice, grupo, desde_cruce)
         destinos = plan_descargas(cruces, self.raiz, grupo, set(), todo=self.todo, sin_cruce_dir=carpeta_sin_cruce)
 
         movidos = reubicar_identificadas(indice, grupo, destinos)

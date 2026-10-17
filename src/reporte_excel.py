@@ -23,6 +23,7 @@ from .config import provincias_de_grupo
 from .cruce import cruzar
 from .descargas import etiqueta_identificador
 from .matcher import asociar_mensajes
+from .busqueda import cruces_de_grupo
 
 AZUL, GRIS = "1F3864", "F2F2F2"
 VERDE, AMBAR, ROJO, NEUTRO = "C6EFCE", "FFEB9C", "FFC7CE", "E7E6E6"
@@ -61,7 +62,7 @@ def _tabla(ws, fila0: int, titulos: list[str], filas: list[list], anchos: dict[i
 
 
 def _color_estado(celda, estado: str) -> None:
-    color = (VERDE if estado.startswith("Con evidencia") else AMBAR if estado.startswith("Revisar") else
+    color = (VERDE if estado.startswith("Con evidencia") else AMBAR if estado.startswith(("Revisar", "Probable")) else
              ROJO if estado.startswith("Sin evidencia") else NEUTRO)
     celda.fill = PatternFill("solid", fgColor=color)
     celda.font = Font(bold=True)
@@ -73,12 +74,8 @@ def _archivos(rutas: str | None) -> list[Path]:
 
 def analizar_grupo(cfg, excel, indice, grupo: str, desde: datetime) -> dict:
     """Cruza un grupo y devuelve todo lo que necesitan las hojas del reporte."""
-    m = cfg.matching
     provincias = provincias_de_grupo(cfg, grupo)
-    mensajes = indice.mensajes(grupo)
-    resultados = [r for r in asociar_mensajes(mensajes, m.patron_codigo_regex, m.ventana_minutos_mensaje_separado, m.patron_elemento_regex)
-                  if r.mensaje.timestamp >= desde and r.mensaje.n_adjuntos > 0]
-    cruces = cruzar(resultados, excel, m.margen_horas_evidencia, provincias)
+    cruces = cruces_de_grupo(cfg, excel, indice, grupo, desde)
     descargas = indice.estado_descarga(grupo)
     filas = excel._filtrar_por_provincias(excel.leer_filas(), provincias)
 
@@ -94,7 +91,9 @@ def analizar_grupo(cfg, excel, indice, grupo: str, desde: datetime) -> dict:
         fotos = sum(a.suffix.lower() not in EXT_VIDEO for a in archivos)
         videos = len(archivos) - fotos
         if cs:
-            estado = "Con evidencia" if any(c.estado == "ok" for c in cs) else "Revisar horario"
+            estado = ("Con evidencia" if any(c.estado == "ok" for c in cs) else
+                      "Revisar horario" if any(c.estado == "revisar_horario" for c in cs) else
+                      "Probable (comentario de otra persona)")
         elif f.fecha_deteccion and f.fecha_deteccion.date() < desde.date():
             estado = f"Fuera del rango consultado (antes del {desde:%d/%m})"
         else:
@@ -108,7 +107,7 @@ def analizar_grupo(cfg, excel, indice, grupo: str, desde: datetime) -> dict:
             "estado": estado, "paquetes": len(cs), "fotos": fotos, "videos": videos,
             "primera": min((c.match.mensaje.timestamp for c in cs), default=None), "ultima": max((c.match.mensaje.timestamp for c in cs), default=None),
             "remitentes": ", ".join(sorted({c.match.mensaje.remitente for c in cs if c.match.mensaje.remitente})),
-            "vias": ", ".join(sorted({c.match.origen.value for c in cs})), "carpeta": str(carpetas[0]) if carpetas else "",
+            "vias": ", ".join(sorted({c.match.origen.value + (" +aprendido" if c.aprendido else "") for c in cs})), "carpeta": str(carpetas[0]) if carpetas else "",
             "nota": f.nota_evidencia_manual or "",
         })
 
@@ -177,7 +176,7 @@ def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta
     for a in analisis:
         inc = a["incidencias"]
         dentro = [i for i in inc if not i["estado"].startswith("Fuera")]
-        con = sum(i["estado"].startswith(("Con evidencia", "Revisar")) for i in inc)
+        con = sum(i["estado"].startswith(("Con evidencia", "Revisar", "Probable")) for i in inc)
         filas_res.append([a["grupo"], len(inc), len(dentro), con, sum(i["estado"].startswith("Sin evidencia") for i in inc),
                           f"{con / len(dentro):.0%}" if dentro else "-", a["paquetes"], sum(i["fotos"] for i in inc), sum(i["videos"] for i in inc)])
     _tabla(ws, 4, ["Grupo", "Incidencias asignadas", "Dentro del rango", "Con evidencia", "Sin evidencia (pedir)", "% cubierto",

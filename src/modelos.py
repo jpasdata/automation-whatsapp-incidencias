@@ -29,6 +29,7 @@ class TipoOrigenMatch(str, Enum):
     RESPUESTA = "respuesta"                   # un texto con el código CITÓ (respondió a) el paquete multimedia
     MENSAJE_POSTERIOR = "mensaje_posterior"   # mandó las fotos y escribió el código DESPUÉS (sin citar)
     RAFAGA = "rafaga"                         # foto suelta sin número, pegada (<= 2 min) a otra del mismo remitente que sí lo trae
+    COMENTARIO_AJENO = "comentario_ajeno"     # foto sin número; OTRA persona escribió un número justo antes/después (probable, a revisar)
     SIN_CODIGO = "sin_codigo"                 # no se encontró ningún código
 
 

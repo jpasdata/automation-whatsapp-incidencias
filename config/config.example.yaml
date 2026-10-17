@@ -54,6 +54,12 @@ matching:
   # un rato después de terminar). 4 horas es un punto de partida, no el
   # valor final — ajústalo con casos reales de la Fase 0.
   margen_horas_evidencia: 4
+  # Medido en el chat real: en Oeste y Azuero el texto con el número llega más tarde (P90 ~60 min) que en Veraguas y Coclé (~40).
+  ventana_minutos_por_grupo:
+    "Oeste": 75
+    "Azuero": 75
+  # Número escrito por OTRA persona (coordinador) a <= N min de una foto sin número: se marca como "probable" para revisar. 0 = no usar.
+  ventana_minutos_comentario_ajeno: 20
 
 # FUERA DE ALCANCE por ahora: Henry confirmó que él avisa por CORREO
 # cuando falta evidencia, no por WhatsApp. Esta sección y

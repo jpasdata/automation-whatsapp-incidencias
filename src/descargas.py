@@ -29,6 +29,7 @@ from .cruce import ResultadoCruce, cruzar
 from .excel_manager import ExcelManager
 from .indice import Indice
 from .matcher import asociar_mensajes
+from .busqueda import cruces_de_grupo
 from .whatsapp_reader import _JS_IR_ARRIBA, descargar_adjunto
 
 logger = logging.getLogger("incidencias_wa")
@@ -253,11 +254,7 @@ class Descargador:
 
     # --- cruce -----------------------------------------------------------------------------------
     def calcular_plan(self) -> dict[str, TareaDescarga]:
-        m = self.cfg.matching
-        mensajes = self.indice.mensajes(self.grupo)
-        resultados = [r for r in asociar_mensajes(mensajes, m.patron_codigo_regex, m.ventana_minutos_mensaje_separado, m.patron_elemento_regex)
-                      if r.mensaje.timestamp >= self.desde and r.mensaje.n_adjuntos > 0]
-        cruces = cruzar(resultados, self.excel, m.margen_horas_evidencia, self.provincias)
+        cruces = cruces_de_grupo(self.cfg, self.excel, self.indice, self.grupo, self.desde)
         self.estados = Counter(c.estado for c in cruces)
         self._cruces = cruces
         hechas = {i for i, (est, _) in self.indice.estado_descarga(self.grupo).items() if est is not None}

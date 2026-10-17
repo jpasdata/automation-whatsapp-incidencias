@@ -47,7 +47,7 @@ class ExcelEnVivo:
             logger.exception("EXCEL EN VIVO: falló la actualización.")
             return False
         self._ultimo = time.time()
-        con = sum(1 for a in analisis for i in a["incidencias"] if i["estado"].startswith(("Con evidencia", "Revisar")))
+        con = sum(1 for a in analisis for i in a["incidencias"] if i["estado"].startswith(("Con evidencia", "Revisar", "Probable")))
         logger.info("EXCEL EN VIVO actualizado (%.0fs): %d filas escritas, %d incidencias con evidencia -> %s", time.time() - t0, filas, con, self.ruta_cruzado)
         eventos.evento("-", "excel_vivo", "actualizado", "ok", f"filas={filas} con_evidencia={con}")
         return True

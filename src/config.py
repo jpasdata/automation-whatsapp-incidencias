@@ -56,6 +56,8 @@ class MatchingConfig:
     ventana_minutos_mensaje_separado: int
     margen_horas_evidencia: float = 4
     provincias_por_grupo: dict[str, list[str]] = field(default_factory=dict)  # fragmento del grupo -> provincias del Excel
+    ventana_minutos_por_grupo: dict[str, int] = field(default_factory=dict)  # fragmento del grupo -> ventana propia (min)
+    ventana_minutos_comentario_ajeno: float = 0  # 0 = no usar comentarios de otras personas
     patron_elemento_regex: str | None = r"\bF[\s:\-#]?\d{3,6}\b"  # "F-15966", "F:08976"; "" lo desactiva
 
 
@@ -101,6 +103,18 @@ def resolver_cargar_desde(valor: str | None, hoy: datetime | None = None) -> dat
         return datetime.fromisoformat(v)
     except ValueError as e:
         raise ConfigError(f"whatsapp.cargar_desde='{valor}' no es 'mes_actual' ni una fecha AAAA-MM-DD.") from e
+
+
+def ventana_texto_de_grupo(cfg: "AppConfig", grupo: str) -> int:
+    """Minutos hacia atrás/adelante para un texto con número del mismo remitente (propia del grupo si está configurada)."""
+    from .modelos import normalizar_texto
+
+    g = normalizar_texto(grupo) or ""
+    for fragmento, minutos in cfg.matching.ventana_minutos_por_grupo.items():
+        f = normalizar_texto(fragmento) or ""
+        if f and (f in g or g in f):
+            return minutos
+    return cfg.matching.ventana_minutos_mensaje_separado
 
 
 def provincias_de_grupo(cfg: "AppConfig", grupo: str) -> set[str] | None:
@@ -187,6 +201,8 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             ventana_minutos_mensaje_separado=int(mt.get("ventana_minutos_mensaje_separado", 15)),
             margen_horas_evidencia=float(mt.get("margen_horas_evidencia", 4)),
             provincias_por_grupo={str(k): [str(p) for p in (v or [])] for k, v in (mt.get("provincias_por_grupo") or {}).items()},
+            ventana_minutos_por_grupo={str(k): int(v) for k, v in (mt.get("ventana_minutos_por_grupo") or {}).items()},
+            ventana_minutos_comentario_ajeno=float(mt.get("ventana_minutos_comentario_ajeno", 0)),
             patron_elemento_regex=(mt["patron_elemento_regex"] or None) if "patron_elemento_regex" in mt else MatchingConfig.patron_elemento_regex,
         ),
         notificaciones=NotificacionesConfig(

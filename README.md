@@ -22,6 +22,8 @@ fotos y videos** (organizados por día y por aviso/incidencia), **los cruza cont
 | Reorganizar lo ya bajado | `python scripts/reorganizar_descargas.py` | Tras cambiar el Excel o las reglas; no abre WhatsApp. |
 | Reporte Excel | `python scripts/generar_reporte.py --desde 2026-10-01 --todos` | Genera un reporte a demanda (el bot ya lo hace solo). |
 | Estado de descargas | `python scripts/estado_descargas.py` | Qué se bajó, qué falló y por qué. |
+| Limpiar y ordenar | botón en la interfaz, o `python scripts/limpiar.py --simular` / `python scripts/limpiar.py --reorganizar` | Archiva logs de prueba, quita cachés y carpetas vacías, respalda el índice. **Nunca borra evidencias, índice, sesión ni Excel.** |
+| Actualizar este PC | `Actualizar_proyecto.bat` (o botón «Actualizar desde GitHub») | Baja la versión nueva, quita residuos del proceso anterior, regenera `config.yaml` (deja `config.yaml.respaldo`) y verifica. No toca `data/` ni la sesión. |
 | Comportamiento del grupo | `python scripts/analizar_comportamiento.py` | Estadísticas de cómo reporta la gente (guía las ventanas de espera). |
 
 ## Resultados

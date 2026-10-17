@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+from tkinter import messagebox
 from datetime import datetime
 from pathlib import Path
 from tkinter import ttk
@@ -79,6 +80,7 @@ class Interfaz:
         self.btn = tk.Button(botones, text="INICIAR", font=("Segoe UI", 14, "bold"), bg="#2e7d32", fg="white", width=12, command=self.alternar)
         self.btn.pack(side="left")
         for texto, cmd in (("Verificar entorno", self.verificar_entorno), ("Estado de descargas", self.ver_estado_descargas), ("Generar reporte Excel", self.generar_reporte),
+                           ("Limpiar y ordenar", self.limpiar), ("Actualizar desde GitHub", self.actualizar_proyecto),
                            ("Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS)), ("Abrir Excel en vivo", self.abrir_excel_vivo), ("Abrir logs", lambda: os.startfile(RAIZ / "logs"))):
             tk.Button(botones, text=texto, font=("Segoe UI", 10), command=cmd).pack(side="left", padx=5)
         self.al_dia = tk.BooleanVar(value=False)
@@ -134,6 +136,41 @@ class Interfaz:
             os.startfile(ruta)
         else:
             self.estado.set("Aún no hay Excel en vivo: se crea con la primera vuelta/cruce")
+
+    def _ejecutar(self, args: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, *args], cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"}, creationflags=0x08000000)
+
+    def limpiar(self) -> None:
+        """Muestra qué se limpiaría (simulación), pregunta y aplica. Nunca borra evidencias, índice, sesión ni Excel."""
+        if self.btn.cget("text") == "DETENER":
+            messagebox.showwarning("Limpiar", "Detén primero el bot (botón DETENER) y vuelve a intentar.")
+            return
+        p = self._ejecutar(["scripts/limpiar.py", "--simular"])
+        self._mostrar((p.stdout + p.stderr).strip())
+        if p.returncode != 0:
+            return
+        if not messagebox.askyesno("Limpiar y ordenar", "Esto es lo que se hará (ver el panel).\nNada de evidencias, índice, sesión ni Excel se borra: "
+                                   "lo viejo se archiva.\n\n¿Aplicar la limpieza?"):
+            return
+        reorg = messagebox.askyesno("Limpiar y ordenar", "¿También reorganizar lo ya descargado (renombrar y mover a las carpetas con aviso/incidencia)?")
+        self.estado.set("Limpiando...")
+        self.r.update_idletasks()
+        p = self._ejecutar(["scripts/limpiar.py", *(["--reorganizar"] if reorg else [])])
+        self._mostrar((p.stdout + p.stderr).strip())
+        self.estado.set("Limpieza terminada" if p.returncode == 0 else "La limpieza tuvo errores: lee el panel")
+
+    def actualizar_proyecto(self) -> None:
+        """Baja la versión nueva de GitHub con Actualizar_proyecto.bat (en otra ventana). Cierra la interfaz porque el código cambia."""
+        if self.btn.cget("text") == "DETENER":
+            messagebox.showwarning("Actualizar", "Detén primero el bot (botón DETENER) y vuelve a intentar.")
+            return
+        if not messagebox.askyesno("Actualizar desde GitHub", "Se cerrarán los procesos viejos, se bajará la versión nueva y se regenerará "
+                                   "config.yaml (queda copia como config.yaml.respaldo).\nTus datos, evidencias y la sesión de WhatsApp NO se tocan.\n\n"
+                                   "La interfaz se cerrará; vuelve a abrirla con Iniciar_interfaz.bat al terminar.\n\n¿Continuar?"):
+            return
+        subprocess.Popen(["cmd", "/c", "start", "Actualizar proyecto", str(RAIZ / "Actualizar_proyecto.bat")], cwd=RAIZ)
+        self.r.after(500, self.r.destroy)
 
     def generar_reporte(self) -> None:
         """Genera el reporte Excel con formato a partir de lo indexado y descargado (no abre WhatsApp)."""
