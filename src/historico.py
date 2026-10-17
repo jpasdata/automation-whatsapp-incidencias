@@ -111,6 +111,7 @@ def cargar_historico(
 
 def _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descargador, reintento_seg) -> None:
     ronda = 0
+    sin_avance = 0
     if True:
         while True:
             ronda += 1
@@ -150,6 +151,15 @@ def _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descarga
             if time.time() >= limite:
                 logger.warning("Se agotó el tiempo (%d min) sin llegar a %s.", minutos, desde.date())
                 break
+            if stats["tandas"] == 0:
+                sin_avance += 1
+                if sin_avance >= 3:
+                    logger.warning("El celular ya no entrega mensajes más antiguos: 3 rondas seguidas sin tandas nuevas. "
+                                   "El histórico de '%s' llega hasta %s (se pedía desde %s). Se da por terminado en vez de gastar el tiempo restante.",
+                                   grupo, primero, desde.date())
+                    break
+            else:
+                sin_avance = 0
             if stats["tandas"] == 0:
                 logger.info("Sin tandas nuevas; reintento en %ds (quedan ~%d min)...", reintento_seg, int((limite - time.time()) / 60))
                 sesion.pagina.wait_for_timeout(reintento_seg * 1000)
