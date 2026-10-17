@@ -1,0 +1,19 @@
+config/config.yaml
+sesion_whatsapp/
+logs/*.log
+logs/*.json
+data/Evidencias_WhatsApp/**
+!data/Evidencias_WhatsApp/.gitkeep
+*.xlsx
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+data/indice/
+*.sqlite3
+
+# logs: capturas de WhatsApp, reportes y cruces con datos reales
+logs/*
+!logs/.gitkeep

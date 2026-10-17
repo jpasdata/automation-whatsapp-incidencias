@@ -1,0 +1,8 @@
+# Dependencias de producción — versiones FIJAS a propósito (reproducibilidad).
+# Para revisar si hay versiones más nuevas disponibles: python scripts/check_dependencies.py
+# No actualices a ciegas: lee el changelog de playwright/pandas antes de subir de versión mayor.
+
+playwright==1.64.0
+pandas==2.3.3
+openpyxl==3.1.5
+PyYAML==6.0.3

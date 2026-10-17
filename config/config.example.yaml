@@ -1,0 +1,68 @@
+# Copia este archivo a config/config.yaml y ajusta los valores.
+# config/config.yaml NO se sube a git (ver .gitignore) porque puede tener datos sensibles.
+
+whatsapp:
+  # Uno o varios grupos. Basta con que el texto esté CONTENIDO en el título del chat
+  # (no hace falta copiar los emojis como ✅).
+  grupos:
+    - "NOMBRE_EXACTO_DEL_GRUPO"
+  # Hasta dónde subir en cada chat para leer el histórico: "mes_actual" (hoy: octubre),
+  # una fecha "AAAA-MM-DD", o "" para solo lo que haya cargado.
+  cargar_desde: "mes_actual"
+  carpeta_sesion: "./sesion_whatsapp"       # aquí se guarda el login persistente (QR una sola vez)
+  headless: false                           # arrancar en false mientras se valida; luego puede pasar a true
+
+excel:
+  ruta_archivo: "./data/RESULTADO_CREACION_INCIDENCIAS.xlsx"
+  nombre_hoja: "Asignacion- SEP"
+  columna_codigo_largo: "COD-INCIDENCIA"    # ej. 011682220001
+  columna_codigo_corto: "Incidencia"        # ej. 1168222
+  columna_evidencia_manual: "EVIDENCIA"     # notas libres existentes de Jeam/Henry — NO se sobreescribe
+  columna_estado_automatico: "Estado_Automatico"   # columna NUEVA que crea el script
+  columna_ruta_foto: "Ruta_Evidencia"              # columna NUEVA que crea el script
+  # --- Cascada de búsqueda (código -> elemento -> aviso), como la hace Henry a mano ---
+  # Deja cualquiera de estas en "" si tu Excel no la tiene / no la quieres usar en la cascada.
+  columna_observaciones: "Observaciones"    # de aquí se extrae el número de elemento (ej. "...elemento F3092...")
+  columna_numero_aviso: "NUMERO AVISO"
+  columna_fecha_deteccion: "Fecha Detección"   # para validar la ventana horaria de la evidencia
+  columna_fecha_sr: "Fecha SR"
+  # Relaciona cada incidencia con un grupo: un grupo solo cruza contra las filas de sus provincias.
+  columna_provincia: "Provincia"
+
+# --- PENDIENTE DE DEFINIR (ver Fase 0 / README) ---
+# El formato real del código que escriben en el grupo todavía no está confirmado.
+# Se deja un patrón candidato (código corto, 6-8 dígitos); ajústalo según lo que
+# arroje el reporte de exploracion.py antes de activar la Fase 1.
+matching:
+  # fragmento del nombre del grupo -> provincias del Excel que atiende (sin importar tildes/mayúsculas)
+  provincias_por_grupo:
+    "Veraguas": ["VERAGUAS"]
+    "Coclé": ["COCLE"]
+    "Azuero": ["LOS SANTOS", "HERRERA"]
+    "MECOPT(Oeste)": ["PANAMA OESTE"]
+  patron_codigo_regex: '\b\d{6,8}\b'
+  ventana_minutos_mensaje_separado: 15   # cuánto tiempo atrás buscar un código en un mensaje de texto anterior del mismo remitente
+  # PENDIENTE DE CONFIRMAR CON HENRY: cuántas horas después de Fecha SR
+  # todavía es normal que llegue la foto/video (en campo suele mandarse
+  # un rato después de terminar). 4 horas es un punto de partida, no el
+  # valor final — ajústalo con casos reales de la Fase 0.
+  margen_horas_evidencia: 4
+
+# FUERA DE ALCANCE por ahora: Henry confirmó que él avisa por CORREO
+# cuando falta evidencia, no por WhatsApp. Esta sección y
+# src/notificador.py quedan como una idea para una fase futura (y si
+# se llega a hacer, sería integración de correo, no de WhatsApp) — hoy
+# main.py no los usa para nada. No hace falta llenar esto.
+notificaciones:
+  activas: false
+  mapeo_nombre_telefono: {}
+  plantilla_mensaje: ""
+
+rutas:
+  carpeta_evidencias: "./data/Evidencias_WhatsApp"
+  carpeta_identificadas: "Incidencias_Identificadas"
+  carpeta_sin_codigo: "Sin_Codigo_Asignado"
+
+logging:
+  carpeta_logs: "./logs"
+  nivel: "INFO"   # DEBUG para ver todo el detalle mientras se ajustan selectores
