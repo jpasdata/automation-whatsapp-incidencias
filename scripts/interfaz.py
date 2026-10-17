@@ -440,8 +440,60 @@ class Interfaz:
         self.proc.wait()
         self.cola.put("\0FIN")
 
+    def _usa_mouse(self) -> bool:
+        modo = self.modo.get()
+        return ("cargar_historico" in MODOS[modo][0]) or ("vigilante" in MODOS[modo][0] and self.al_dia.get())
+
+    def _franja_pantalla(self, activo: bool) -> None:
+        """Franja siempre visible sobre TODAS las ventanas (también sobre el navegador del bot); el mouse la atraviesa."""
+        if not activo:
+            if getattr(self, "franja", None) is not None:
+                try:
+                    self.franja.destroy()
+                except Exception:
+                    pass
+                self.franja = None
+            return
+        try:
+            import tkinter as tk
+            f = tk.Toplevel(self.r)
+            f.overrideredirect(True)
+            f.attributes("-topmost", True)
+            f.attributes("-alpha", 0.9)
+            f.configure(bg="#15803d")
+            self.franja_txt = tk.StringVar()
+            tk.Label(f, textvariable=self.franja_txt, bg="#15803d", fg="white", font=("Segoe UI", 12, "bold"), padx=18, pady=6).pack()
+            f.update_idletasks()
+            ancho = max(f.winfo_reqwidth(), 520)
+            f.geometry(f"{ancho}x{f.winfo_reqheight()}+{(f.winfo_screenwidth() - ancho) // 2}+0")
+            self.franja = f
+            self._actualizar_franja()
+            try:   # clic «a través»: no tapa nada ni recibe clics
+                import ctypes
+                hwnd = ctypes.windll.user32.GetParent(f.winfo_id()) or f.winfo_id()
+                estilo = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+                ctypes.windll.user32.SetWindowLongW(hwnd, -20, estilo | 0x80000 | 0x20 | 0x80)
+            except Exception:
+                pass
+        except Exception:
+            self.franja = None
+
+    def _actualizar_franja(self) -> None:
+        f = getattr(self, "franja", None)
+        if f is None:
+            return
+        grupo = self.v["grupo"].get()
+        grupo = "" if grupo in ("", "-") else f" · {grupo}"
+        mouse = "  ·  NO USES EL MOUSE" if self._usa_mouse() else ""
+        self.franja_txt.set(f"🤖 BOT ACTIVO — {modo_corto(self.modo.get())}{grupo}{mouse}")
+        color = "#b91c1c" if mouse else "#15803d"
+        f.configure(bg=color)
+        for w in f.winfo_children():
+            w.configure(bg=color)
+
     def _anunciar_modo(self, activo: bool) -> None:
-        """Franja visible y título de la ventana con el modo y el grupo que se están ejecutando."""
+        """Franja en la ventana, título y franja sobre toda la pantalla con el modo y el grupo que se están ejecutando."""
+        self._franja_pantalla(activo)
         if activo:
             texto = f"●  EN MARCHA — modo {modo_corto(self.modo.get())} · {'TODOS los grupos' if self.grupo.get() == TODOS else self.grupo.get()}"
             self.aviso_modo.configure(text=texto, fg_color=VERDE)
@@ -500,6 +552,7 @@ class Interfaz:
             pass
         if self.inicio and self._corriendo():
             self.v["tiempo"].set(str(datetime.now() - self.inicio).split(".")[0])
+            self._actualizar_franja()
         self._resumen_indice()
         self.r.after(1000, self.refrescar)
 

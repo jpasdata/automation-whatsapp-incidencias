@@ -324,3 +324,16 @@ def test_cargar_incidencias_con_el_bot_corriendo_solo_deja_los_archivos(ui, monk
     ui.btn.configure(text="■  DETENER")
     ui.cargar_incidencias()
     assert (tmp_path / "proyecto" / "data" / "Incidencias" / "nuevas" / "nuevas.xlsx").exists() and "vigilante" in ui.estado.get().lower()
+
+
+def test_la_franja_de_pantalla_aparece_con_el_modo_y_desaparece(ui):
+    ui.modo.set(next(m for m in ui_mod.MODOS if "VIGILANTE" in m))
+    ui.al_dia.set(True)
+    ui._anunciar_modo(True)
+    assert ui.franja is not None
+    assert "BOT ACTIVO" in ui.franja_txt.get() and "VIGILANTE" in ui.franja_txt.get() and "NO USES EL MOUSE" in ui.franja_txt.get()
+    ui.al_dia.set(False)
+    ui._actualizar_franja()
+    assert "NO USES EL MOUSE" not in ui.franja_txt.get()
+    ui._anunciar_modo(False)
+    assert ui.franja is None
