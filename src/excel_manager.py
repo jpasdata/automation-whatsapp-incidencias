@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import logging
+
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -90,6 +92,9 @@ def extraer_numero_elemento(observaciones: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+logger = logging.getLogger("incidencias_wa")
+
+
 @dataclass
 class FilaIncidencia:
     fila_excel: int  # número de fila real en la hoja (1-indexed, incluye encabezado)
@@ -102,6 +107,7 @@ class FilaIncidencia:
     nota_evidencia_manual: str | None
     categoria_nota_manual: str
     provincia: str | None = None  # normalizada (sin tildes, mayúsculas)
+    hoja: str = ""  # "" = hoja principal; si no, el nombre de la hoja adicional de donde salió la fila
 
 
 class ExcelManager:
@@ -119,7 +125,10 @@ class ExcelManager:
         columna_fecha_deteccion: str | None = "Fecha Detección",
         columna_fecha_sr: str | None = "Fecha SR",
         columna_provincia: str | None = None,
+        hojas_extra: list[str] | None = None,
     ):
+        self.hojas_extra = list(hojas_extra or [])
+        self._extra: dict[str, tuple] = {}  # hoja adicional -> (hoja de valores, índice de columnas)
         self.ruta_archivo = Path(ruta_archivo)
         self.nombre_hoja = nombre_hoja
         self.columna_codigo_largo = columna_codigo_largo
@@ -142,6 +151,13 @@ class ExcelManager:
         self._ws_valores: Worksheet | None = None
         self._idx_por_nombre: dict[str, int] = {}
 
+    @classmethod
+    def desde_config(cls, ruta_archivo: str, e) -> "ExcelManager":
+        """Crea el manager con todo lo de la sección `excel` de config.yaml (incluidas las hojas adicionales)."""
+        return cls(ruta_archivo, e.nombre_hoja, e.columna_codigo_largo, e.columna_codigo_corto, e.columna_evidencia_manual,
+                   e.columna_estado_automatico, e.columna_ruta_foto, e.columna_observaciones, e.columna_numero_aviso,
+                   e.columna_fecha_deteccion, e.columna_fecha_sr, e.columna_provincia, hojas_extra=getattr(e, "hojas_extra", None))
+
     def abrir(self) -> None:
         if not self.ruta_archivo.exists():
             raise ExcelManagerError(f"No existe el archivo: {self.ruta_archivo}")
@@ -155,9 +171,31 @@ class ExcelManager:
         # Hoja gemela con los valores calculados: columnas como COD-INCIDENCIA
         # son fórmulas, y sin data_only openpyxl devuelve el texto de la
         # fórmula. Solo se lee de aquí; las escrituras van a self._ws.
-        self._ws_valores = openpyxl.load_workbook(self.ruta_archivo, data_only=True)[self.nombre_hoja]
+        wb_valores = openpyxl.load_workbook(self.ruta_archivo, data_only=True)
+        self._ws_valores = wb_valores[self.nombre_hoja]
         self._mapear_columnas()
         self._asegurar_columnas_nuevas()
+        self._abrir_hojas_extra(wb_valores)
+
+    def _abrir_hojas_extra(self, wb_valores) -> None:
+        """
+        Hojas adicionales con más incidencias del mismo responsable (p. ej. 'OCTUBRE', 'c ya entregados sin correo').
+        Se usan columnas por nombre si la hoja tiene encabezado; si no lo tiene (la primera fila ya es un dato), se
+        asume la misma disposición de columnas que la hoja principal. Solo se LEEN (el estado se escribe en la principal).
+        """
+        self._extra = {}
+        for nombre in self.hojas_extra:
+            if nombre not in wb_valores.sheetnames:
+                logger.warning("La hoja adicional '%s' no existe en el Excel; se omite. Hojas: %s", nombre, wb_valores.sheetnames)
+                continue
+            ws = wb_valores[nombre]
+            nombres = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
+            if self.columna_codigo_largo in nombres:
+                idx, primera = nombres, 2
+            else:  # sin encabezado: misma disposición que la hoja principal
+                idx, primera = dict(self._idx_por_nombre), 1
+            self._extra[nombre] = (ws, idx, primera)
+            logger.info("Hoja adicional '%s': %s", nombre, "con encabezado" if primera == 2 else "sin encabezado (columnas como la principal)")
 
     def _mapear_columnas(self) -> None:
         encabezado = self._ws[1]
@@ -239,6 +277,29 @@ class ExcelManager:
                     provincia=normalizar_texto(self._valor(fila_num, self.columna_provincia)),
                 )
             )
+        vistos = {f.codigo_largo for f in filas} | {f.codigo_corto for f in filas if f.codigo_corto}
+        for nombre, (ws, idx, primera) in self._extra.items():
+            def val(fila_num, col, ws=ws, idx=idx):
+                c = idx.get(col) if col else None
+                return ws.cell(row=fila_num, column=c).value if c else None
+            for fila_num in range(primera, ws.max_row + 1):
+                largo = val(fila_num, self.columna_codigo_largo)
+                if largo is None or not str(largo).strip().isdigit():
+                    continue  # vacía, encabezado o subtotal
+                corto = str(val(fila_num, self.columna_codigo_corto) or "").strip() or None
+                if str(largo).strip() in vistos or (corto and corto in vistos):
+                    continue  # ya viene en la hoja principal
+                vistos.add(str(largo).strip())
+                nota = val(fila_num, self.columna_evidencia_manual)
+                observaciones = val(fila_num, self.columna_observaciones)
+                filas.append(FilaIncidencia(
+                    fila_excel=fila_num, codigo_largo=str(largo).strip(), codigo_corto=corto,
+                    numero_elemento=extraer_numero_elemento(observaciones),
+                    numero_aviso=self._normalizar_identificador(val(fila_num, self.columna_numero_aviso)),
+                    fecha_deteccion=val(fila_num, self.columna_fecha_deteccion), fecha_sr=val(fila_num, self.columna_fecha_sr),
+                    nota_evidencia_manual=nota, categoria_nota_manual=categorizar_nota_evidencia(nota),
+                    provincia=normalizar_texto(val(fila_num, self.columna_provincia)), hoja=nombre,
+                ))
         return filas
 
     @staticmethod

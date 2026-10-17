@@ -47,6 +47,7 @@ class ExcelConfig:
     columna_fecha_deteccion: str | None = None
     columna_fecha_sr: str | None = None
     columna_provincia: str | None = None
+    hojas_extra: list[str] = field(default_factory=list)  # más hojas con incidencias del mismo responsable
 
 
 @dataclass
@@ -179,6 +180,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             columna_fecha_deteccion=ex.get("columna_fecha_deteccion") or None,
             columna_fecha_sr=ex.get("columna_fecha_sr") or None,
             columna_provincia=ex.get("columna_provincia") or None,
+            hojas_extra=[str(h) for h in (ex.get("hojas_extra") or [])],
         ),
         matching=MatchingConfig(
             patron_codigo_regex=mt["patron_codigo_regex"],

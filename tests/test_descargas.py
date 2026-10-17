@@ -22,8 +22,8 @@ def test_slug_quita_tildes_y_simbolos():
 def test_plan_organiza_por_dia_e_incidencia(tmp_path):
     plan = plan_descargas([_cruce("true_x_ABC12345", 2)], tmp_path, "Veraguas", set())
     t = plan["true_x_ABC12345"]
-    assert t.carpeta == tmp_path / "Veraguas" / "2026-10-09" / "231_12345678"
-    assert t.base.startswith("1405_") and t.n_esperadas == 2
+    assert t.carpeta == tmp_path / "Veraguas" / "2026-10-09" / "Inc-2345678_f231"
+    assert t.base.startswith("1405_Inc-2345678_f231_") and t.n_esperadas == 2
 
 
 def test_plan_omite_sin_fila_sin_adjunto_y_ya_descargadas(tmp_path):
@@ -33,4 +33,4 @@ def test_plan_omite_sin_fila_sin_adjunto_y_ya_descargadas(tmp_path):
 
 def test_todo_incluye_lo_que_no_cruza_en_sin_incidencia(tmp_path):
     plan = plan_descargas([_cruce("a", 3, con_fila=False), _cruce("b", 0)], tmp_path, "G", set(), todo=True)
-    assert list(plan) == ["a"] and plan["a"].carpeta.name == "_sin_incidencia" and plan["a"].estado == "sin_cruce"
+    assert list(plan) == ["a"] and plan["a"].carpeta.parent.name == "_sin_incidencia" and plan["a"].carpeta.name == "Num-12345678" and plan["a"].estado == "sin_cruce"

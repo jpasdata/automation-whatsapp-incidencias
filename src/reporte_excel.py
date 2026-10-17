@@ -102,7 +102,7 @@ def analizar_grupo(cfg, excel, indice, grupo: str, desde: datetime) -> dict:
             estado += " (sin descargar aún)"
         carpetas = sorted({a.parent for a in archivos})
         incidencias.append({
-            "fila": f.fila_excel, "codigo": f.codigo_largo or f.codigo_corto or "", "corto": f.codigo_corto or "", "aviso": f.numero_aviso or "",
+            "fila": f.fila_excel, "hoja": f.hoja or "Asignacion", "codigo": f.codigo_largo or f.codigo_corto or "", "corto": f.codigo_corto or "", "aviso": f.numero_aviso or "",
             "elemento": f.numero_elemento or "", "provincia": f.provincia or "", "deteccion": f.fecha_deteccion, "sr": f.fecha_sr,
             "estado": estado, "paquetes": len(cs), "fotos": fotos, "videos": videos,
             "primera": min((c.match.mensaje.timestamp for c in cs), default=None), "ultima": max((c.match.mensaje.timestamp for c in cs), default=None),
@@ -179,21 +179,21 @@ def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta
     filas = []
     for a in analisis:
         for i in a["incidencias"]:
-            filas.append([a["grupo"][:40], i["fila"], i["codigo"], i["corto"], i["aviso"], i["elemento"], i["provincia"],
+            filas.append([a["grupo"][:40], i["hoja"], i["fila"], i["codigo"], i["corto"], i["aviso"], i["elemento"], i["provincia"],
                           i["deteccion"], i["sr"], i["estado"], i["paquetes"], i["fotos"], i["videos"], i["primera"], i["ultima"],
                           i["remitentes"], i["vias"], i["carpeta"], i["nota"]])
-    _tabla(ws, 1, ["Grupo", "Fila Excel", "COD-INCIDENCIA", "Incidencia", "N° aviso", "Elemento", "Provincia", "Fecha detección", "Fecha SR",
+    _tabla(ws, 1, ["Grupo", "Hoja", "Fila Excel", "COD-INCIDENCIA", "Incidencia", "N° aviso", "Elemento", "Provincia", "Fecha detección", "Fecha SR",
                    "Estado", "Paquetes", "Fotos", "Videos", "Primera evidencia", "Última evidencia", "Remitentes", "Cómo se identificó",
                    "Carpeta", "Nota manual (Excel)"], filas,
-           {1: 22, 2: 9, 3: 16, 4: 11, 5: 12, 6: 11, 7: 14, 8: 17, 9: 17, 10: 34, 11: 9, 12: 8, 13: 8, 14: 17, 15: 17, 16: 28, 17: 24, 18: 50, 19: 40})
+           {1: 22, 2: 18, 3: 9, 4: 16, 5: 11, 6: 12, 7: 11, 8: 14, 9: 17, 10: 17, 11: 34, 12: 9, 13: 8, 14: 8, 15: 17, 16: 17, 17: 28, 18: 24, 19: 50, 20: 40})
     for r in range(2, len(filas) + 2):
-        for col in (8, 9, 14, 15):
+        for col in (9, 10, 15, 16):
             ws.cell(row=r, column=col).number_format = "dd/mm/yyyy hh:mm"
-        _color_estado(ws.cell(row=r, column=10), str(ws.cell(row=r, column=10).value))
-        ruta = ws.cell(row=r, column=18).value
+        _color_estado(ws.cell(row=r, column=11), str(ws.cell(row=r, column=11).value))
+        ruta = ws.cell(row=r, column=19).value
         if ruta:
-            ws.cell(row=r, column=18).hyperlink = Path(ruta).resolve().as_uri()
-            ws.cell(row=r, column=18).font = Font(color="0563C1", underline="single")
+            ws.cell(row=r, column=19).hyperlink = Path(ruta).resolve().as_uri()
+            ws.cell(row=r, column=19).font = Font(color="0563C1", underline="single")
 
     # ---- Por día ------------------------------------------------------------------------------
     ws = wb.create_sheet("Por día")

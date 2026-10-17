@@ -28,6 +28,7 @@ from src.vigilante import Vigilante  # noqa: E402
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="fragmento del título del grupo")
 ap.add_argument("--todos", action="store_true", help="todos los grupos de config.yaml")
+ap.add_argument("--ponerse-al-dia", action="store_true", help="al iniciar, subir con el mouse (una vez por grupo) para bajar lo de las últimas horas que ya no está en pantalla; NO tocar el mouse mientras tanto")
 ap.add_argument("--solo-cruzadas", action="store_true", help="no bajar lo que no cruza con el Excel")
 ap.add_argument("--ventana-horas", type=float, default=48, help="cuántas horas atrás se vuelve a cruzar (default 48)")
 ap.add_argument("--espera-huerfana-horas", type=float, default=6, help="horas de espera de un comentario antes de dar por huérfana una foto sin número (default 6)")
@@ -54,9 +55,7 @@ def crear_excel() -> ExcelManager:
     copia = Path(tempfile.mkdtemp()) / "copia.xlsx"
     shutil.copy(cfg.excel.ruta_archivo, copia)  # el original no se toca
     e = cfg.excel
-    x = ExcelManager(str(copia), e.nombre_hoja, e.columna_codigo_largo, e.columna_codigo_corto, e.columna_evidencia_manual,
-                     e.columna_estado_automatico, e.columna_ruta_foto, e.columna_observaciones, e.columna_numero_aviso,
-                     e.columna_fecha_deteccion, e.columna_fecha_sr, e.columna_provincia)
+    x = ExcelManager.desde_config(str(copia), e)
     x.abrir()
     return x
 
@@ -64,7 +63,7 @@ def crear_excel() -> ExcelManager:
 try:
     with candado_sesion():
         Vigilante(cfg, grupos, crear_excel, ventana_horas=args.ventana_horas, espera_huerfana_h=args.espera_huerfana_horas,
-                  intervalo_seg=(lo, hi), todo=not args.solo_cruzadas).correr()
+                  intervalo_seg=(lo, hi), todo=not args.solo_cruzadas, ponerse_al_dia=args.ponerse_al_dia).correr()
 except SesionOcupada as e:
     sys.exit(str(e))
 except KeyboardInterrupt:

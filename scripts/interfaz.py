@@ -81,6 +81,8 @@ class Interfaz:
         for texto, cmd in (("Verificar entorno", self.verificar_entorno), ("Estado de descargas", self.ver_estado_descargas), ("Generar reporte Excel", self.generar_reporte),
                            ("Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS)), ("Abrir logs", lambda: os.startfile(RAIZ / "logs"))):
             tk.Button(botones, text=texto, font=("Segoe UI", 10), command=cmd).pack(side="left", padx=5)
+        self.al_dia = tk.BooleanVar(value=False)
+        ttk.Checkbutton(botones, text="Vigilante: ponerse al día al iniciar (usa el mouse)", variable=self.al_dia).pack(side="left", padx=8)
         self.estado = tk.StringVar(value="Detenido")
         tk.Label(botones, textvariable=self.estado, font=("Segoe UI", 12, "bold")).pack(side="left", padx=12)
 
@@ -143,6 +145,8 @@ class Interfaz:
         orden = [sys.executable, "-u", script, *fijas]
         if "vigilante" in script:
             orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
+            if self.al_dia.get():
+                orden += ["--ponerse-al-dia"]
         if "cargar_historico" in script:
             orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
             orden += ["--minutos", self.minutos.get()]

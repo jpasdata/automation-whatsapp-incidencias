@@ -56,6 +56,7 @@ def ejecutar_automatizacion() -> None:
         columna_fecha_deteccion=cfg.excel.columna_fecha_deteccion,
         columna_fecha_sr=cfg.excel.columna_fecha_sr,
         columna_provincia=cfg.excel.columna_provincia,
+        hojas_extra=cfg.excel.hojas_extra,
     )
     excel.abrir()
     logger.info("Excel abierto: %s (hoja: %s)", cfg.excel.ruta_archivo, cfg.excel.nombre_hoja)

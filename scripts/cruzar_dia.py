@@ -46,11 +46,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     copia = Path(tmp) / "copia.xlsx"
     shutil.copy(cfg.excel.ruta_archivo, copia)
     e = cfg.excel
-    excel = ExcelManager(
-        str(copia), e.nombre_hoja, e.columna_codigo_largo, e.columna_codigo_corto, e.columna_evidencia_manual,
-        e.columna_estado_automatico, e.columna_ruta_foto, e.columna_observaciones, e.columna_numero_aviso,
-        e.columna_fecha_deteccion, e.columna_fecha_sr, e.columna_provincia,
-    )
+    excel = ExcelManager.desde_config(str(copia), e)
     excel.abrir()
     esperadas = excel.resumen_por_provincia()
 

@@ -34,6 +34,14 @@ from .whatsapp_reader import _JS_IR_ARRIBA, descargar_adjunto
 logger = logging.getLogger("incidencias_wa")
 
 RAIZ_EVIDENCIAS = Path(__file__).resolve().parent.parent / "data" / "Evidencias_WhatsApp"
+MAX_RUTA = 235  # Windows falla con rutas de ~260 caracteres o más: se deja margen
+
+
+def slug_grupo(grupo: str) -> str:
+    """Nombre corto de carpeta del grupo (sin el sufijo '-Reporte-de-videos...')."""
+    s = _slug(grupo, 60)
+    s = re.sub(r"-Reporte-de-vid.*$", "", s)
+    return s[:32].strip("-") or "grupo"
 
 
 def _slug(texto: str | None, largo: int = 24) -> str:
@@ -51,29 +59,81 @@ class TareaDescarga:
     meta: dict = field(default_factory=dict)   # dia, hora, remitente, fila, codigo, criterio, origen (para el CSV)
 
 
+_RX_AVISO = re.compile(r"^5\d{2}-?\d{4}$")
+_RX_INCID = re.compile(r"^11\d{5}$")
+_RX_LARGO = re.compile(r"^0?\d{11,12}$")
+_RX_ELEM = re.compile(r"^F[\s:\-#]?\d{3,6}$", re.I)
+
+
+def etiqueta_identificador(c: ResultadoCruce) -> str:
+    """
+    Texto que identifica de dónde es una foto, para la carpeta y el nombre del archivo:
+      con incidencia del Excel -> "Inc-1168222_Aviso-5620125_f230"   (f = fila del Excel)
+      número del chat, no está en el Excel -> "Aviso-5633273" / "Inc-1170118" / "Elem-F02210"
+      sin número -> "" (va a _sin_numero)
+    """
+    if c.fila is not None:
+        f = c.fila
+        partes = [f"Inc-{f.codigo_corto or (f.codigo_largo or '')[1:8]}"]
+        if f.numero_aviso:
+            partes.append(f"Aviso-{f.numero_aviso}")
+        partes.append(f"f{f.fila_excel}" + (f"-{_slug(f.hoja, 10)}" if f.hoja else ""))
+        return "_".join(_slug(x, 30) for x in partes)
+    partes = []
+    for cand in c.match.candidatos:
+        n = str(cand).strip().upper().replace(" ", "")
+        if _RX_AVISO.match(n):
+            partes.append(f"Aviso-{n.replace('-', '')}")
+        elif _RX_INCID.match(n):
+            partes.append(f"Inc-{n}")
+        elif _RX_LARGO.match(n):
+            partes.append(f"Inc-{n.lstrip('0')[:7]}")
+        elif _RX_ELEM.match(n):
+            partes.append(f"Elem-{re.sub(r'[^A-Z0-9]', '', n)}")
+        else:
+            partes.append(f"Num-{re.sub(r'[^A-Z0-9]', '', n)}")
+    vistos: list[str] = []
+    for p_ in partes:
+        if p_ not in vistos:
+            vistos.append(p_)
+    return "_".join(vistos[:3])[:60]
+
+
 def plan_descargas(
     cruces: list[ResultadoCruce], raiz: Path, grupo: str, ya_hechas: set[str], todo: bool = False,
     sin_cruce_dir="_sin_incidencia",
 ) -> dict[str, TareaDescarga]:
     """
     Qué bajar: los paquetes con adjunto aún no descargados que cruzan con una fila del Excel (lo normal, para
-    no exceder el ritmo de descargas) o todos (`todo=True`). Los que cruzan van a <día>/<fila>_<código>/.
+    no exceder el ritmo de descargas) o todos (`todo=True`). Organización:
+        <Grupo>/<día>/<Inc-..._Aviso-..._fNN>/                    cruza con el Excel
+        <Grupo>/<día>/<sin_cruce_dir>/<Aviso-.../Inc-...>/        el chat trae número pero no está en el Excel
+        <Grupo>/<día>/_sin_numero/                                 el chat no trae ningún número (aún)
+    y cada archivo se llama <HHMM>_<identificador>_<remitente>_<id>_<n>.<ext>.
     """
     plan: dict[str, TareaDescarga] = {}
     for c in cruces:
         m = c.match.mensaje
         if not m.id_mensaje or m.n_adjuntos <= 0 or m.id_mensaje in ya_hechas or (c.fila is None and not todo):
             continue
+        etiqueta = etiqueta_identificador(c)
+        dia = raiz / slug_grupo(grupo) / f"{m.timestamp:%Y-%m-%d}"
         if c.fila is not None:
             codigo = c.fila.codigo_largo or c.fila.codigo_corto or c.fila.numero_aviso or "sin-codigo"
-            sub = f"{c.fila.fila_excel}_{_slug(codigo, 30)}"
+            carpeta = dia / etiqueta
         else:
-            codigo, sub = "", (sin_cruce_dir(c) if callable(sin_cruce_dir) else sin_cruce_dir)
-        carpeta = raiz / _slug(grupo, 40) / f"{m.timestamp:%Y-%m-%d}" / sub
-        base = f"{m.timestamp:%H%M}_{_slug(m.remitente, 14)}_{_slug(m.id_mensaje[-8:], 8)}"
+            codigo = ""
+            base_dir = sin_cruce_dir(c) if callable(sin_cruce_dir) else sin_cruce_dir
+            carpeta = dia / base_dir / etiqueta if etiqueta else dia / ("_sin_numero" if not callable(sin_cruce_dir) or base_dir == "_otras_incidencias" else base_dir)
+        remit, ident = _slug(m.remitente, 14)[-9:].strip("-"), _slug(m.id_mensaje[-6:], 6)
+        for n_etiq in (24, 16, 8, 0):  # acorta el nombre del archivo si la ruta se pasa del límite de Windows
+            base = "_".join(x for x in (f"{m.timestamp:%H%M}", etiqueta[:n_etiq].strip("_-"), remit, ident) if x)
+            if len(str(carpeta / f"{base}_99.jpg")) <= MAX_RUTA:
+                break
         meta = {
             "dia": f"{m.timestamp:%Y-%m-%d}", "hora": f"{m.timestamp:%H:%M}", "remitente": m.remitente or "",
-            "fila": c.fila.fila_excel if c.fila else "", "codigo": codigo, "numero": c.numero or "",
+            "fila": c.fila.fila_excel if c.fila else "", "codigo": codigo, "numero": c.numero or "", "identificador": etiqueta,
+            "hoja": (c.fila.hoja or "Asignacion") if c.fila else "", "leyenda": (m.texto or "").replace("\n", " ")[:120],
             "criterio": c.criterio.value if c.criterio else "", "origen": c.match.origen.value,
         }
         plan[m.id_mensaje] = TareaDescarga(m.id_mensaje, carpeta, base, m.n_adjuntos,

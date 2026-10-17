@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import logging
 import random
+import re
 import shutil
 import time
 from datetime import datetime, timedelta
@@ -29,11 +30,11 @@ from typing import Callable
 from . import eventos
 from .config import provincias_de_grupo
 from .cruce import ResultadoCruce, cruzar
-from .descargas import RAIZ_EVIDENCIAS, TareaDescarga, _slug, descargar_visibles, plan_descargas
+from .descargas import RAIZ_EVIDENCIAS, TareaDescarga, slug_grupo, descargar_visibles, etiqueta_identificador, plan_descargas
 from .excel_manager import ExcelManager
 from .indice import Indice
 from .matcher import asociar_mensajes
-from .whatsapp_reader import _subir_rapido_al_tope, leer_mensajes_recientes
+from .whatsapp_reader import cargar_hacia_arriba, leer_mensajes_recientes
 from .whatsapp_session import SesionWhatsApp
 
 logger = logging.getLogger("incidencias_wa")
@@ -43,8 +44,18 @@ def carpeta_sin_cruce(c: ResultadoCruce) -> str:
     return "_sin_numero" if c.estado == "sin_numero" else "_otras_incidencias"
 
 
+def nombre_final(a: Path, t: TareaDescarga) -> str:
+    """Nombre que debe llevar el archivo: <base con identificador>_<n>.<ext> (conserva el número de foto del álbum)."""
+    m = re.search(r"_(\d+)$", a.stem)
+    return f"{t.base}_{m.group(1) if m else 1}{a.suffix}"
+
+
 def reubicar_identificadas(indice: Indice, grupo: str, destinos: dict[str, TareaDescarga]) -> int:
-    """Mueve a su carpeta definitiva los archivos ya descargados cuyo destino cambió (se identificaron tarde)."""
+    """
+    Mueve/renombra a su carpeta definitiva los archivos ya descargados cuyo destino cambió (se identificaron tarde, o
+    cambió la regla de carpetas). A prueba de fallos: un archivo que no se puede mover se registra y se sigue; si el
+    índice apunta a un archivo que ya no está en la ruta vieja pero sí en la nueva, se corrige el índice.
+    """
     movidos = 0
     for id_msg, (estado, ruta) in indice.estado_descarga(grupo).items():
         if estado != "ok" or not ruta or id_msg not in destinos:
@@ -53,12 +64,22 @@ def reubicar_identificadas(indice: Indice, grupo: str, destinos: dict[str, Tarea
         nuevos, cambio = [], False
         for r in (x for x in ruta.split(";") if x):
             a = Path(r)
-            if a.exists() and a.parent != t.carpeta:
-                t.carpeta.mkdir(parents=True, exist_ok=True)
-                dest = t.carpeta / a.name
-                k = 1
+            final = t.carpeta / nombre_final(a, t)
+            if not a.exists():
+                if final.exists():  # ya estaba movido pero el índice no lo sabía
+                    nuevos.append(final)
+                    cambio = True
+                else:
+                    logger.warning("  Archivo registrado que ya no existe: %s", a)
+                continue
+            if a == final:
+                nuevos.append(a)
+                continue
+            try:
+                final.parent.mkdir(parents=True, exist_ok=True)
+                dest, k = final, 1
                 while dest.exists():
-                    dest = t.carpeta / f"{a.stem}_{k}{a.suffix}"
+                    dest = final.with_name(f"{final.stem}_x{k}{final.suffix}")
                     k += 1
                 antigua = a.parent
                 shutil.move(str(a), str(dest))
@@ -68,13 +89,14 @@ def reubicar_identificadas(indice: Indice, grupo: str, destinos: dict[str, Tarea
                     antigua.rmdir()  # si quedó vacía
                 except OSError:
                     pass
-            else:
+            except OSError as e:
+                logger.error("  No se pudo mover %s -> %s: %s", a.name, final.parent, e)
                 nuevos.append(a)
         if cambio:
             indice.marcar_descarga(grupo, id_msg, "ok", ";".join(str(n) for n in nuevos))
             movidos += 1
-            logger.info("  IDENTIFICADA DESPUÉS: %s %s de %s -> %s (cruce: %s)", t.meta.get("dia"), t.meta.get("hora"),
-                        t.meta.get("remitente"), t.carpeta.name, t.meta.get("origen"))
+            logger.info("  REORGANIZADA: %s %s de %s -> %s/%s (cruce: %s)", t.meta.get("dia"), t.meta.get("hora"),
+                        t.meta.get("remitente"), t.carpeta.parent.name, t.carpeta.name, t.meta.get("origen"))
             eventos.evento(grupo, "vigilante", "reubicada", "ok", f"{t.meta.get('dia')} {t.meta.get('hora')} -> {t.carpeta.name} ({t.meta.get('origen')})")
     return movidos
 
@@ -89,17 +111,17 @@ def escribir_manifiestos(indice: Indice, grupo: str, cruces: list[ResultadoCruce
             continue
         est, ruta = descargas.get(m.id_mensaje, (None, None))
         por_dia.setdefault(f"{m.timestamp:%Y-%m-%d}", []).append([
-            m.timestamp.strftime("%H:%M"), m.remitente, m.n_adjuntos, (m.texto or "").replace("\n", " ")[:160],
+            m.timestamp.strftime("%H:%M"), etiqueta_identificador(c) or "(sin número)", m.remitente, m.n_adjuntos, (m.texto or "").replace("\n", " ")[:160],
             c.estado, c.fila.fila_excel if c.fila else "", (c.fila.codigo_largo or c.fila.codigo_corto) if c.fila else "",
             c.numero or "", c.criterio.value if c.criterio else "", c.match.origen.value, ", ".join(c.match.candidatos),
             est or "pendiente", ruta or "", m.id_mensaje,
         ])
     for dia, filas in por_dia.items():
-        carpeta = raiz / _slug(grupo, 40) / dia
+        carpeta = raiz / slug_grupo(grupo) / dia
         carpeta.mkdir(parents=True, exist_ok=True)
         with open(carpeta / f"manifiesto_{dia}.csv", "w", newline="", encoding="utf-8-sig") as f:
             w = csv.writer(f)
-            w.writerow(["hora", "remitente", "adjuntos", "leyenda", "estado_cruce", "fila_excel", "codigo", "numero_que_cruzo", "criterio",
+            w.writerow(["hora", "identificador", "remitente", "adjuntos", "leyenda", "estado_cruce", "fila_excel", "codigo", "numero_que_cruzo", "criterio",
                         "como_se_identifico", "numeros_en_el_chat", "descarga", "archivos", "id_mensaje"])
             w.writerows(sorted(filas))
     return len(por_dia)
@@ -108,12 +130,14 @@ def escribir_manifiestos(indice: Indice, grupo: str, cruces: list[ResultadoCruce
 class Vigilante:
     def __init__(self, cfg, grupos: list[str], crear_excel: Callable[[], ExcelManager], ventana_horas: float = 48,
                  espera_huerfana_h: float = 6, intervalo_seg: tuple[int, int] = (150, 300), todo: bool = True,
-                 raiz: Path = RAIZ_EVIDENCIAS, ruta_indice: Path | None = None):
+                 raiz: Path = RAIZ_EVIDENCIAS, ruta_indice: Path | None = None, ponerse_al_dia: bool = False):
         from .historico import RUTA_INDICE
 
         self.cfg, self.grupos, self.crear_excel = cfg, grupos, crear_excel
         self.ventana_horas, self.espera_huerfana_h, self.intervalo_seg = ventana_horas, espera_huerfana_h, intervalo_seg
         self.todo, self.raiz, self.ruta_indice = todo, raiz, ruta_indice or RUTA_INDICE
+        self.ponerse_al_dia = ponerse_al_dia
+        self._al_dia: set[str] = set()
         self.excel: ExcelManager | None = None
         self._excel_mtime = 0.0
         self._excel_cargado_en = 0.0
@@ -156,19 +180,28 @@ class Vigilante:
         if pendientes:
             logger.info("[%s] por bajar: %d mensajes (cruzan: %d, sin número: %d, otras incidencias: %d)", grupo[:30], len(pendientes),
                         sum(1 for t in pendientes.values() if t.estado != "sin_cruce" or t.meta.get("fila")),
-                        sum(1 for t in pendientes.values() if t.carpeta.name == "_sin_numero"),
-                        sum(1 for t in pendientes.values() if t.carpeta.name == "_otras_incidencias"))
+                        sum(1 for t in pendientes.values() if "_sin_numero" in t.carpeta.parts),
+                        sum(1 for t in pendientes.values() if "_otras_incidencias" in t.carpeta.parts))
             ok, mal = descargar_visibles(pagina, pendientes, indice, grupo, max_pasos=120)
             bajados, fallidos = ok, mal
-            for _ in range(4):  # lo que no estaba pintado: subir un poco (local, sin pedir al celular) y reintentar
-                hechas = {i for i, (est, _) in indice.estado_descarga(grupo).items() if est is not None}
-                pendientes = {i: t for i, t in pendientes.items() if i not in hechas}
-                if not pendientes:
-                    break
-                _subir_rapido_al_tope(pagina, max_pasos=6)
-                ok, mal = descargar_visibles(pagina, pendientes, indice, grupo, max_pasos=120, desde_arriba=False)
+            hechas = {i for i, (est, _) in indice.estado_descarga(grupo).items() if est is not None}
+            pendientes = {i: t for i, t in pendientes.items() if i not in hechas}
+            if pendientes and self.ponerse_al_dia and grupo not in self._al_dia:
+                # Lo más viejo ya no está pintado: Web solo pide mensajes antiguos con la rueda REAL del mouse
+                # (bajar y subir), así que se sube como una persona hasta cubrir la ventana. Una vez por grupo.
+                logger.info("[%s] %d mensajes anteriores fuera de pantalla: PONIÉNDOSE AL DÍA (sube con el mouse; no lo toques).",
+                            grupo[:30], len(pendientes))
+                self._al_dia.add(grupo)
+                st = cargar_hacia_arriba(pagina, desde=desde_cruce, max_seg=900, rueda_real=True)
+                logger.info("[%s] subida de puesta al día: %s", grupo[:30], st)
+                ok, mal = descargar_visibles(pagina, pendientes, indice, grupo, max_pasos=800)
                 bajados += ok
                 fallidos += mal
+                hechas = {i for i, (est, _) in indice.estado_descarga(grupo).items() if est is not None}
+                pendientes = {i: t for i, t in pendientes.items() if i not in hechas}
+            if pendientes:
+                logger.info("[%s] %d mensajes siguen sin bajar (no están pintados; se bajan con --ponerse-al-dia o scripts/cargar_historico.py).",
+                            grupo[:30], len(pendientes))
         # el manifiesto y el conteo de huérfanas se recalculan con el cruce final
         escribir_manifiestos(indice, grupo, cruces, self.raiz, desde_cruce)
         limite = datetime.now() - timedelta(hours=self.espera_huerfana_h)
