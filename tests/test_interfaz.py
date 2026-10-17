@@ -331,10 +331,10 @@ def test_la_franja_de_pantalla_aparece_con_el_modo_y_desaparece(ui):
     ui.al_dia.set(True)
     ui._anunciar_modo(True)
     assert ui.franja is not None
-    assert "BOT ACTIVO" in ui.franja_txt.get() and "VIGILANTE" in ui.franja_txt.get() and "NO USES EL MOUSE" in ui.franja_txt.get()
+    assert "BOT ACTIVO" in ui.franja_txt.get() and "VIGILANTE" in ui.franja_txt.get() and "esta franja se pondrá ROJA" in ui.franja_txt.get()
     ui.al_dia.set(False)
     ui._actualizar_franja()
-    assert "NO USES EL MOUSE" not in ui.franja_txt.get()
+    assert "ROJA" not in ui.franja_txt.get()
     ui._anunciar_modo(False)
     assert ui.franja is None
 
@@ -347,3 +347,31 @@ def test_la_franja_se_ajusta_al_texto_y_cabe_en_pantalla(ui):
     assert ui.franja.winfo_width() >= ui.franja.winfo_reqwidth() - 2        # el texto cabe completo
     assert ui.franja.winfo_width() <= ui.franja.winfo_screenwidth()
     ui._anunciar_modo(False)
+
+
+def test_la_franja_explica_que_hace_que_no_se_puede_y_que_viene(ui):
+    historico = next(m for m in ui_mod.MODOS if "descargar lo que cruza" in m)
+    ui.modo.set(historico)
+    ui.encadenar.set(True)
+    ui.v["fase"].set("Ronda 2: subiendo el chat")
+    texto, color = ui._texto_franja()
+    assert "Haciendo: Ronda 2: subiendo el chat" in texto and "NO PUEDES" in texto and "pasará solo a modo VIGILANTE" in texto and color == "#b91c1c"
+    ui.encadenar.set(False)
+    assert "se detiene" in ui._texto_franja()[0]
+    ui.modo.set(next(m for m in ui_mod.MODOS if "VIGILANTE" in m))
+    texto, color = ui._texto_franja()
+    assert "Puedes usar el PC" in texto and color == "#15803d"
+    ui._interpretar("[Veraguas] CERRANDO EL HUECO: subiendo con el mouse hasta empalmar (no lo toques unos minutos).")
+    texto, color = ui._texto_franja()
+    assert "AHORA NO TOQUES EL MOUSE" in texto and color == "#b91c1c"
+    ui._interpretar("[Veraguas] hueco cerrado: 12 mensajes recuperados")
+    assert ui._texto_franja()[1] == "#15803d"
+
+
+def test_al_terminar_el_historico_pasa_solo_a_vigilante(ui, monkeypatch):
+    arrancados = []
+    monkeypatch.setattr(ui, "iniciar", lambda: arrancados.append((ui.modo.get(), ui.grupo.get())))
+    ui.modo.set(next(m for m in ui_mod.MODOS if "descargar lo que cruza" in m))
+    ui._pasar_a_vigilante()
+    assert arrancados and "VIGILANTE" in arrancados[0][0] and arrancados[0][1] == ui_mod.TODOS
+    assert "pasar a modo VIGILANTE" in ui.nota_franja[0] or "pasó a modo VIGILANTE" in ui.nota_franja[0] or "VIGILANTE" in ui.nota_franja[0]

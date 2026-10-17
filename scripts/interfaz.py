@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -172,15 +172,20 @@ class Interfaz:
         self.desde = ctk.StringVar(value="")
         self.minutos = ctk.StringVar(value="100")
         self.al_dia = ctk.BooleanVar(value=True)
+        self.encadenar = ctk.BooleanVar(value=True)
+        self.subiendo = False          # el vigilante está subiendo el chat con el mouse (lo avisa su registro)
+        self.nota_franja = ("", None)  # mensaje temporal en la franja (por ejemplo, el paso a modo vigilante)
         for col, (titulo, var) in enumerate((("HOY Y … DÍAS ANTES", self.dias), ("O DESDE (AAAA-MM-DD)", self.desde), ("TOPE POR GRUPO (MIN)", self.minutos))):
             f = bloque(2, col)
             etiqueta(f, titulo)
             ctk.CTkEntry(f, textvariable=var, height=32, font=(FUENTE, 13)).pack(fill="x", pady=(3, 0))
         ctk.CTkCheckBox(cfg, text="Vigilante: si hay hueco, subir con el mouse unos minutos", variable=self.al_dia, font=(FUENTE, 12),
                         text_color=TEXTO).grid(row=3, column=0, columnspan=3, sticky="w", padx=16, pady=(10, 4))
+        ctk.CTkCheckBox(cfg, text="Al terminar un histórico, pasar solo a VIGILANTE (todos los grupos)", variable=self.encadenar, font=(FUENTE, 12),
+                        text_color=TEXTO).grid(row=4, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 4))
         self.btn = ctk.CTkButton(cfg, text="▶  INICIAR", command=self.alternar, height=48, corner_radius=12, font=(FUENTE, 17, "bold"),
                                  fg_color=VERDE, hover_color=VERDE_H)
-        self.btn.grid(row=4, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 14))
+        self.btn.grid(row=5, column=0, columnspan=3, sticky="ew", padx=14, pady=(6, 14))
 
         self.v = {k: ctk.StringVar(value="-") for k in ("grupo", "fase", "tandas", "tiempo", "indice", "antiguo", "cruce", "fotos")}
         tarjetas = [("grupo", "Grupo actual", 0, 0, 1, 84), ("fase", "Fase", 0, 1, 1, 84), ("tandas", "Tandas cargadas", 1, 0, 1, 70), ("tiempo", "Tiempo corrido", 1, 1, 1, 70),
@@ -456,13 +461,16 @@ class Interfaz:
             return
         try:
             import tkinter as tk
+            if getattr(self, "franja", None) is not None:
+                self.franja.destroy()
             f = tk.Toplevel(self.r)
             f.overrideredirect(True)
             f.attributes("-topmost", True)
-            f.attributes("-alpha", 0.9)
+            f.attributes("-alpha", 0.93)
             f.configure(bg="#15803d")
             self.franja_txt = tk.StringVar()
-            tk.Label(f, textvariable=self.franja_txt, bg="#15803d", fg="white", font=("Segoe UI", 12, "bold"), padx=18, pady=6).pack()
+            tk.Label(f, textvariable=self.franja_txt, bg="#15803d", fg="white", font=("Segoe UI", 11, "bold"), padx=18, pady=6,
+                     justify="center", wraplength=max(400, f.winfo_screenwidth() - 160)).pack()
             self.franja = f
             self._actualizar_franja()
             try:   # clic «a través»: no tapa nada ni recibe clics
@@ -475,21 +483,54 @@ class Interfaz:
         except Exception:
             self.franja = None
 
+    def _texto_franja(self) -> tuple[str, str]:
+        """(texto, color): qué hace el bot, qué NO se puede hacer y qué viene después."""
+        modo = MODOS[self.modo.get()][0]
+        historico = "cargar_historico" in modo
+        grupo = self.v["grupo"].get()
+        grupo = "" if grupo in ("", "-") else f" · {grupo.split(':', 1)[0]}: {grupo.split(':', 1)[-1].strip()[:22]}"
+        fase = self.v["fase"].get()
+        haciendo = "preparando…" if fase in ("", "-") else fase
+        lineas = [f"🤖 BOT ACTIVO — {modo_corto(self.modo.get())}{grupo}", f"Haciendo: {haciendo}"]
+        nota, hasta = self.nota_franja
+        if nota and hasta and datetime.now() < hasta:
+            lineas.insert(1, nota)
+        if historico:
+            lineas.append("NO PUEDES: usar el mouse ni el teclado · cerrar, mover o minimizar el navegador del bot · apagar o suspender el PC")
+            lineas.append("AL TERMINAR: pasará solo a modo VIGILANTE (todos los grupos)" if self.encadenar.get()
+                          else "AL TERMINAR: se detiene y tú eliges el siguiente paso")
+            return "\n".join(lineas), "#b91c1c"
+        if "vigilante" in modo:
+            if self.subiendo:
+                lineas.append("AHORA NO TOQUES EL MOUSE: está subiendo el chat para cerrar un hueco (unos minutos)")
+                return "\n".join(lineas), "#b91c1c"
+            lineas.append("Puedes usar el PC con normalidad; no cierres ni muevas el navegador del bot")
+            if self.al_dia.get():
+                lineas.append("Si detecta un hueco subirá el chat con el mouse unos minutos: esta franja se pondrá ROJA, y ahí no lo toques")
+            return "\n".join(lineas), "#15803d"
+        lineas.append("Puedes usar el PC con normalidad; no cierres ni muevas el navegador del bot")
+        return "\n".join(lineas), "#15803d"
+
     def _actualizar_franja(self) -> None:
         f = getattr(self, "franja", None)
         if f is None:
             return
-        grupo = self.v["grupo"].get()
-        grupo = "" if grupo in ("", "-") else f" · {grupo.split(':', 1)[0]}: {grupo.split(':', 1)[-1].strip()[:22]}"
-        mouse = "  ·  NO USES EL MOUSE" if self._usa_mouse() else ""
-        self.franja_txt.set(f"🤖 BOT ACTIVO — {modo_corto(self.modo.get())}{grupo}{mouse}")
-        color = "#b91c1c" if mouse else "#15803d"
+        texto, color = self._texto_franja()
+        self.franja_txt.set(texto)
         f.configure(bg=color)
         for w in f.winfo_children():
             w.configure(bg=color)
         f.update_idletasks()      # la franja se ajusta al texto actual (y nunca más ancha que la pantalla)
         ancho = min(f.winfo_reqwidth(), f.winfo_screenwidth() - 40)
         f.geometry(f"{ancho}x{f.winfo_reqheight()}+{(f.winfo_screenwidth() - ancho) // 2}+0")
+
+    def _pasar_a_vigilante(self) -> None:
+        """Termina un histórico y arranca el vigilante sobre todos los grupos, avisándolo en la franja y en el registro."""
+        self.modo.set(next(m for m in MODOS if MODOS[m][0].endswith("vigilante.py")))
+        self.grupo.set(TODOS)
+        self._mostrar("\n=== HISTÓRICO TERMINADO: pasando a modo VIGILANTE (todos los grupos) ===\n")
+        self.nota_franja = ("✔ HISTÓRICO TERMINADO — acaba de pasar a modo VIGILANTE", datetime.now() + timedelta(seconds=45))
+        self.iniciar()
 
     def _anunciar_modo(self, activo: bool) -> None:
         """Franja en la ventana, título y franja sobre toda la pantalla con el modo y el grupo que se están ejecutando."""
@@ -525,6 +566,10 @@ class Interfaz:
             self.v["fase"].set(f"Descargando (pasada {m[1]}/{m[2]})")
         if "Bajando " in linea or "-> ok" in linea or "-> error" in linea or "-> parcial" in linea or "Barrido" in linea or "DESCARGA" in linea:
             self.v["fotos"].set(linea.split("|")[-1].strip()[:150])
+        if "PONIÉNDOSE AL DÍA" in linea or "CERRANDO EL HUECO" in linea:
+            self.subiendo = True
+        if "hueco cerrado" in linea or "VUELTA:" in linea:
+            self.subiendo = False
         if "VUELTA:" in linea:
             self.v["fotos"].set(linea.split("VUELTA:")[-1].strip()[:150])
             self.v["fase"].set("Vigilante: " + linea.split("]")[0].split("|")[-1].strip()[:40])
@@ -545,6 +590,8 @@ class Interfaz:
                     self._anunciar_modo(False)
                     if self.estado.get() != "Detenido por ti":
                         self._estado("Terminado" if cod == 0 else f"Terminó con código {cod}", VERDE if cod == 0 else ROJO)
+                    if cod == 0 and not self.parar and self.encadenar.get() and "cargar_historico" in MODOS[self.modo.get()][0]:
+                        self.r.after(1500, self._pasar_a_vigilante)
                     continue
                 self._interpretar(linea)
                 self._escribir(linea)
