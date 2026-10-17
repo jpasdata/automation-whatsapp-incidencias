@@ -463,9 +463,6 @@ class Interfaz:
             f.configure(bg="#15803d")
             self.franja_txt = tk.StringVar()
             tk.Label(f, textvariable=self.franja_txt, bg="#15803d", fg="white", font=("Segoe UI", 12, "bold"), padx=18, pady=6).pack()
-            f.update_idletasks()
-            ancho = max(f.winfo_reqwidth(), 520)
-            f.geometry(f"{ancho}x{f.winfo_reqheight()}+{(f.winfo_screenwidth() - ancho) // 2}+0")
             self.franja = f
             self._actualizar_franja()
             try:   # clic «a través»: no tapa nada ni recibe clics
@@ -483,13 +480,16 @@ class Interfaz:
         if f is None:
             return
         grupo = self.v["grupo"].get()
-        grupo = "" if grupo in ("", "-") else f" · {grupo}"
+        grupo = "" if grupo in ("", "-") else f" · {grupo.split(':', 1)[0]}: {grupo.split(':', 1)[-1].strip()[:22]}"
         mouse = "  ·  NO USES EL MOUSE" if self._usa_mouse() else ""
         self.franja_txt.set(f"🤖 BOT ACTIVO — {modo_corto(self.modo.get())}{grupo}{mouse}")
         color = "#b91c1c" if mouse else "#15803d"
         f.configure(bg=color)
         for w in f.winfo_children():
             w.configure(bg=color)
+        f.update_idletasks()      # la franja se ajusta al texto actual (y nunca más ancha que la pantalla)
+        ancho = min(f.winfo_reqwidth(), f.winfo_screenwidth() - 40)
+        f.geometry(f"{ancho}x{f.winfo_reqheight()}+{(f.winfo_screenwidth() - ancho) // 2}+0")
 
     def _anunciar_modo(self, activo: bool) -> None:
         """Franja en la ventana, título y franja sobre toda la pantalla con el modo y el grupo que se están ejecutando."""

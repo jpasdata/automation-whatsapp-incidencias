@@ -337,3 +337,13 @@ def test_la_franja_de_pantalla_aparece_con_el_modo_y_desaparece(ui):
     assert "NO USES EL MOUSE" not in ui.franja_txt.get()
     ui._anunciar_modo(False)
     assert ui.franja is None
+
+
+def test_la_franja_se_ajusta_al_texto_y_cabe_en_pantalla(ui):
+    ui.modo.set(next(m for m in ui_mod.MODOS if "descargar lo que cruza" in m))
+    ui.v["grupo"].set("1/1: CFFM_Veraguas_Sea_Central-Reporte de videos")
+    ui._anunciar_modo(True)
+    ui.franja.update_idletasks()
+    assert ui.franja.winfo_width() >= ui.franja.winfo_reqwidth() - 2        # el texto cabe completo
+    assert ui.franja.winfo_width() <= ui.franja.winfo_screenwidth()
+    ui._anunciar_modo(False)
