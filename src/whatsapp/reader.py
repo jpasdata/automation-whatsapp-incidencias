@@ -760,8 +760,11 @@ _JS_CABECERA_VISOR = r"""() => {
   return e ? e.textContent.trim() : null;
 }"""
 
-_BOTON_SIGUIENTE = 'button[aria-label="Siguiente"], button[aria-label="Next"]'
-_BOTON_ANTERIOR = 'button[aria-label="Anterior"], button[aria-label="Previous"]'
+# Etiquetas en español, inglés y portugués, y por fragmento por si WhatsApp cambia el texto exacto. Si ninguna aparece se usan las flechas del teclado.
+_BOTON_SIGUIENTE = ('button[aria-label="Siguiente"], button[aria-label="Next"], button[aria-label*="iguiente" i], '
+                    'button[aria-label*="next" i], button[aria-label*="eguinte" i]')
+_BOTON_ANTERIOR = ('button[aria-label="Anterior"], button[aria-label="Previous"], button[aria-label*="nterior" i], '
+                   'button[aria-label*="previous" i]')
 _BOTON_DESCARGAR = 'button[aria-label="Descargar"], button[aria-label="Download"]'
 _BOTON_CERRAR = 'button[aria-label="Cerrar"], button[aria-label="Close"]'
 
@@ -793,6 +796,17 @@ def _bajar_elemento_actual(pagina: Page, carpeta: Path, base: str) -> Path | Non
     return ruta
 
 
+def _avanzar(pagina: Page) -> None:
+    """Pasa al siguiente elemento del visor: botón «Siguiente» (cualquier idioma) o, si no aparece, la flecha derecha del teclado.
+    Si ya era el último, el visor no cambia y quien llama lo detecta (mismo archivo o encabezado distinto)."""
+    sig = pagina.locator(_BOTON_SIGUIENTE).first
+    if sig.count() > 0:
+        sig.click(timeout=4_000)
+    else:
+        logger.debug("  no se encontró el botón Siguiente: se avanza con la flecha derecha del teclado")
+        pagina.keyboard.press("ArrowRight")
+
+
 def descargar_adjunto(
     pagina: Page, miniatura: Locator, carpeta_destino: Path, nombre_base: str, todo_el_album: bool = False, max_album: int = 60,
     errores: list[str] | None = None,
@@ -818,14 +832,21 @@ def descargar_adjunto(
             # al llegar al mensaje anterior) y se avanza uno, para no dejar fotos atrás.
             for retro in range(max_album):
                 ant = pagina.locator(_BOTON_ANTERIOR).first
-                if ant.count() == 0 or not ant.is_enabled() or ant.get_attribute("aria-disabled") == "true":
+                hay_ant = ant.count() > 0
+                if hay_ant and (not ant.is_enabled() or ant.get_attribute("aria-disabled") == "true"):
                     break
-                ant.click(timeout=4_000)
+                if not hay_ant:
+                    logger.debug("  no se encontró el botón Anterior: se retrocede con la flecha del teclado")
+                    pagina.keyboard.press("ArrowLeft")
+                else:
+                    ant.click(timeout=4_000)
                 pagina.wait_for_timeout(600)
                 if pagina.evaluate(_JS_CABECERA_VISOR) != cabecera:
-                    pagina.locator(_BOTON_SIGUIENTE).first.click(timeout=4_000)
+                    _avanzar(pagina)
                     pagina.wait_for_timeout(600)
                     retro -= 1
+                    break
+                if not hay_ant and retro >= 8:   # sin botón no se sabe cuándo termina el retroceso: tope corto
                     break
             logger.debug("  retrocedió %d foto(s) hasta el inicio del álbum", retro + 1)
         vistos: set[int] = set()
@@ -844,11 +865,12 @@ def descargar_adjunto(
             if not todo_el_album:
                 break
             sig = pagina.locator(_BOTON_SIGUIENTE).first
-            if sig.count() == 0 or not sig.is_enabled() or sig.get_attribute("aria-disabled") == "true":
-                logger.debug("  fin del álbum tras %d elemento(s): no hay botón Siguiente activo", n)
+            hay_boton = sig.count() > 0
+            if hay_boton and (not sig.is_enabled() or sig.get_attribute("aria-disabled") == "true"):
+                logger.debug("  fin del álbum tras %d elemento(s): el botón Siguiente está desactivado", n)
                 break
             pagina.wait_for_timeout(random.randint(500, 1400))
-            sig.click(timeout=4_000)
+            _avanzar(pagina)
             pagina.wait_for_timeout(700)
             nueva = pagina.evaluate(_JS_CABECERA_VISOR)
             if nueva != cabecera:  # ya es otro mensaje
