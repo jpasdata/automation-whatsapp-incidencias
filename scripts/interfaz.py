@@ -483,33 +483,31 @@ class Interfaz:
         except Exception:
             self.franja = None
 
+    @staticmethod
+    def _grupo_corto(texto: str) -> str:
+        """«1/4: CFFM_Veraguas_Sea_Central-Reporte…» -> «Veraguas (1/4)»."""
+        num, _, titulo = texto.partition(":")
+        nombre = next((g for g in ("Veraguas", "Oeste", "Coclé", "Azuero") if g.lower() in titulo.lower()), titulo.strip()[:16])
+        return f"{nombre} ({num.strip()})" if "/" in num else nombre
+
     def _texto_franja(self) -> tuple[str, str]:
-        """(texto, color): qué hace el bot, qué NO se puede hacer y qué viene después."""
+        """(texto, color) en dos líneas: qué hace el bot (y qué no puedes hacer) y qué viene después."""
         modo = MODOS[self.modo.get()][0]
-        historico = "cargar_historico" in modo
         grupo = self.v["grupo"].get()
-        grupo = "" if grupo in ("", "-") else f" · {grupo.split(':', 1)[0]}: {grupo.split(':', 1)[-1].strip()[:22]}"
+        donde = "" if grupo in ("", "-") else f" · {self._grupo_corto(grupo)}"
         fase = self.v["fase"].get()
-        haciendo = "preparando…" if fase in ("", "-") else fase
-        lineas = [f"🤖 BOT ACTIVO — {modo_corto(self.modo.get())}{grupo}", f"Haciendo: {haciendo}"]
+        fase = "" if fase in ("", "-") else f" · {fase.replace('Vigilante: ', '')[:34]}"
         nota, hasta = self.nota_franja
-        if nota and hasta and datetime.now() < hasta:
-            lineas.insert(1, nota)
-        if historico:
-            lineas.append("NO PUEDES: usar el mouse ni el teclado · cerrar, mover o minimizar el navegador del bot · apagar o suspender el PC")
-            lineas.append("AL TERMINAR: pasará solo a modo VIGILANTE (todos los grupos)" if self.encadenar.get()
-                          else "AL TERMINAR: se detiene y tú eliges el siguiente paso")
-            return "\n".join(lineas), "#b91c1c"
+        aviso = f"{nota}\n" if nota and hasta and datetime.now() < hasta else ""
+        if "cargar_historico" in modo:
+            sigue = "Al terminar pasa solo a VIGILANTE" if self.encadenar.get() else "Al terminar se detiene"
+            return f"{aviso}🤖 HISTÓRICO{donde}{fase}  —  NO uses mouse ni teclado, no cierres el navegador\n{sigue}", "#b91c1c"
         if "vigilante" in modo:
             if self.subiendo:
-                lineas.append("AHORA NO TOQUES EL MOUSE: está subiendo el chat para cerrar un hueco (unos minutos)")
-                return "\n".join(lineas), "#b91c1c"
-            lineas.append("Puedes usar el PC con normalidad; no cierres ni muevas el navegador del bot")
-            if self.al_dia.get():
-                lineas.append("Si detecta un hueco subirá el chat con el mouse unos minutos: esta franja se pondrá ROJA, y ahí no lo toques")
-            return "\n".join(lineas), "#15803d"
-        lineas.append("Puedes usar el PC con normalidad; no cierres ni muevas el navegador del bot")
-        return "\n".join(lineas), "#15803d"
+                return f"{aviso}🤖 VIGILANTE{donde}  —  SUBIENDO EL CHAT: NO TOQUES EL MOUSE (unos minutos)\nSe pone verde al cerrar el hueco", "#b91c1c"
+            hueco = "Si hay hueco subirá con el mouse: se pondrá ROJA" if self.al_dia.get() else "Sin mouse: no cierra huecos"
+            return f"{aviso}🤖 VIGILANTE{donde}{fase}  —  puedes usar el PC, no cierres el navegador\n{hueco}", "#15803d"
+        return f"{aviso}🤖 {modo_corto(self.modo.get())}{donde}{fase}  —  puedes usar el PC, no cierres el navegador", "#15803d"
 
     def _actualizar_franja(self) -> None:
         f = getattr(self, "franja", None)
@@ -529,7 +527,7 @@ class Interfaz:
         self.modo.set(next(m for m in MODOS if MODOS[m][0].endswith("vigilante.py")))
         self.grupo.set(TODOS)
         self._mostrar("\n=== HISTÓRICO TERMINADO: pasando a modo VIGILANTE (todos los grupos) ===\n")
-        self.nota_franja = ("✔ HISTÓRICO TERMINADO — acaba de pasar a modo VIGILANTE", datetime.now() + timedelta(seconds=45))
+        self.nota_franja = ("✔ Histórico terminado → ahora en modo VIGILANTE", datetime.now() + timedelta(seconds=45))
         self.iniciar()
 
     def _anunciar_modo(self, activo: bool) -> None:
