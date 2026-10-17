@@ -45,6 +45,13 @@ MODOS = {
     "VIGILANTE: bajar todo lo que llega, todo el día": ("scripts/vigilante.py", []),
 }
 
+MODO_CORTO = {"VIGILANTE": "VIGILANTE", "Solo actualizar": "ACTUALIZAR", "Solo subir": "SUBIR E INDEXAR", "descargar TODO": "HISTÓRICO (todo)", "descargar lo que cruza": "HISTÓRICO (lo que cruza)"}
+
+
+def modo_corto(modo: str) -> str:
+    return next((v for k, v in MODO_CORTO.items() if k in modo), modo)
+
+
 # Paleta (claro, oscuro)
 FONDO = ("#f1f5f9", "#0b1220")
 TARJETA = ("#ffffff", "#162033")
@@ -132,6 +139,8 @@ class Interfaz:
         self.pastilla = ctk.CTkLabel(enc, textvariable=self.estado, font=(FUENTE, 13, "bold"), text_color="white", fg_color="#64748b",
                                      corner_radius=14, height=30, padx=16)
         self.pastilla.grid(row=0, column=2, sticky="e")
+        self.aviso_modo = ctk.CTkLabel(enc, text="", font=(FUENTE, 13, "bold"), text_color="white", fg_color=VERDE, corner_radius=8, height=30,
+                                       anchor="w", padx=14)      # franja que dice qué se está ejecutando (se muestra solo mientras corre)
 
         # columna izquierda: configuración + tarjetas
         izq = ctk.CTkScrollableFrame(cuerpo, fg_color="transparent", width=450)
@@ -416,6 +425,7 @@ class Interfaz:
         self.inicio = datetime.now()
         self.btn.configure(text="■  DETENER", fg_color=ROJO, hover_color=ROJO_H)
         self._estado("Corriendo…", VERDE)
+        self._anunciar_modo(True)
         self.barra.start()
         for k in ("grupo", "fase", "tandas", "cruce", "fotos"):
             self.v[k].set("-")
@@ -430,12 +440,24 @@ class Interfaz:
         self.proc.wait()
         self.cola.put("\0FIN")
 
+    def _anunciar_modo(self, activo: bool) -> None:
+        """Franja visible y título de la ventana con el modo y el grupo que se están ejecutando."""
+        if activo:
+            texto = f"●  EN MARCHA — modo {modo_corto(self.modo.get())} · {'TODOS los grupos' if self.grupo.get() == TODOS else self.grupo.get()}"
+            self.aviso_modo.configure(text=texto, fg_color=VERDE)
+            self.aviso_modo.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+            self.r.title(f"● {modo_corto(self.modo.get())} — Evidencias WhatsApp · Incidencias")
+        else:
+            self.aviso_modo.grid_remove()
+            self.r.title("Evidencias WhatsApp · Incidencias")
+
     def detener(self) -> None:
         self.parar = True
         if self.proc and self.proc.poll() is None:
             # taskkill /T cierra también el navegador que abrió el proceso
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True, creationflags=0x08000000)
         self._estado("Detenido por ti", "#64748b")
+        self._anunciar_modo(False)
 
     # --- refresco ----------------------------------------------------------------------------
     def _interpretar(self, linea: str) -> None:
@@ -468,6 +490,7 @@ class Interfaz:
                     self.btn.configure(text="▶  INICIAR", fg_color=VERDE, hover_color=VERDE_H)
                     self.barra.stop()
                     self.barra.set(0)
+                    self._anunciar_modo(False)
                     if self.estado.get() != "Detenido por ti":
                         self._estado("Terminado" if cod == 0 else f"Terminó con código {cod}", VERDE if cod == 0 else ROJO)
                     continue
