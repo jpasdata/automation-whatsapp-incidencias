@@ -1,3 +1,7 @@
 @echo off
 cd /d "%~dp0"
-.venv\Scripts\python.exe scripts\interfaz.py || python scripts\interfaz.py
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" scripts\interfaz.py
+) else (
+  python scripts\interfaz.py
+)
