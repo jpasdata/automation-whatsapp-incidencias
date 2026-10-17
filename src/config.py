@@ -47,6 +47,7 @@ class ExcelConfig:
     columna_fecha_deteccion: str | None = None
     columna_fecha_sr: str | None = None
     columna_provincia: str | None = None
+    asignado_a: str | None = None  # si se pone (p. ej. "Henry"), solo se cruzan las filas con ese responsable en la columna "Asignado a"
     hojas_extra: list[str] = field(default_factory=list)  # más hojas con incidencias del mismo responsable
 
 
@@ -195,6 +196,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
             columna_fecha_sr=ex.get("columna_fecha_sr") or None,
             columna_provincia=ex.get("columna_provincia") or None,
             hojas_extra=[str(h) for h in (ex.get("hojas_extra") or [])],
+            asignado_a=(str(ex.get("asignado_a")).strip() or None) if ex.get("asignado_a") else None,
         ),
         matching=MatchingConfig(
             patron_codigo_regex=mt["patron_codigo_regex"],

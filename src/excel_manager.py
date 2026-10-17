@@ -141,7 +141,9 @@ class ExcelManager:
         columna_fecha_sr: str | None = "Fecha SR",
         columna_provincia: str | None = None,
         hojas_extra: list[str] | None = None,
+        asignado_a: str | None = None,
     ):
+        self.asignado_a = asignado_a or None
         self.hojas_extra = list(hojas_extra or [])
         self._extra: dict[str, tuple] = {}  # hoja adicional -> (hoja de valores, índice de columnas)
         self.ruta_archivo = Path(ruta_archivo)
@@ -172,7 +174,8 @@ class ExcelManager:
         """Crea el manager con todo lo de la sección `excel` de config.yaml (incluidas las hojas adicionales)."""
         return cls(ruta_archivo, e.nombre_hoja, e.columna_codigo_largo, e.columna_codigo_corto, e.columna_evidencia_manual,
                    e.columna_estado_automatico, e.columna_ruta_foto, e.columna_observaciones, e.columna_numero_aviso,
-                   e.columna_fecha_deteccion, e.columna_fecha_sr, e.columna_provincia, hojas_extra=getattr(e, "hojas_extra", None))
+                   e.columna_fecha_deteccion, e.columna_fecha_sr, e.columna_provincia, hojas_extra=getattr(e, "hojas_extra", None),
+                   asignado_a=getattr(e, "asignado_a", None))
 
     def abrir(self) -> None:
         if not self.ruta_archivo.exists():
@@ -279,6 +282,8 @@ class ExcelManager:
             if codigo_largo is None:
                 continue  # fila vacía, probablemente el final de los datos reales
 
+            if not self._es_del_responsable(self._valor(fila_num, "Asignado a")):
+                continue
             nota = self._ws_valores.cell(row=fila_num, column=col_evid).value
             observaciones = self._valor(fila_num, self.columna_observaciones)
 
@@ -294,7 +299,8 @@ class ExcelManager:
                     nota_evidencia_manual=nota,
                     categoria_nota_manual=categorizar_nota_evidencia(nota),
                     provincia=normalizar_texto(self._valor(fila_num, self.columna_provincia)),
-                    avisos_extra=extraer_avisos(observaciones, self._valor(fila_num, "Descripcion"), nota,
+                    avisos_extra=extraer_avisos(observaciones, self._valor(fila_num, "Descripcion"), nota, self._valor(fila_num, "Otros avisos"),
+                                                self._valor(fila_num, "Historial de asignaciones"),
                                                 excluir=self._normalizar_identificador(self._valor(fila_num, self.columna_numero_aviso))),
                 )
             )
@@ -311,6 +317,8 @@ class ExcelManager:
                 if str(largo).strip() in vistos or (corto and corto in vistos):
                     continue  # ya viene en la hoja principal
                 vistos.add(str(largo).strip())
+                if not self._es_del_responsable(val(fila_num, "Asignado a")):
+                    continue
                 nota = val(fila_num, self.columna_evidencia_manual)
                 observaciones = val(fila_num, self.columna_observaciones)
                 filas.append(FilaIncidencia(
@@ -323,8 +331,24 @@ class ExcelManager:
                     avisos_extra=extraer_avisos(observaciones, val(fila_num, "Descripcion"), nota,
                                                 excluir=self._normalizar_identificador(val(fila_num, self.columna_numero_aviso))),
                 ))
+        for f in filas:
+            self._separar_avisos_multiples(f)
         self._filas_cache = filas
         return filas
+
+    @staticmethod
+    def _separar_avisos_multiples(f: "FilaIncidencia") -> None:
+        """Una celda NUMERO AVISO con varios avisos ("5628632, 5629719") no sirve para buscar: se separan; el primero queda como aviso."""
+        nums = extraer_avisos(f.numero_aviso)
+        if len(nums) >= 2:
+            f.numero_aviso = nums[0]
+            f.avisos_extra = tuple(dict.fromkeys((*nums[1:], *f.avisos_extra)))
+
+    def _es_del_responsable(self, valor) -> bool:
+        """Con `asignado_a` configurado (p. ej. "Henry"), solo cuentan las filas de ese responsable. Si no hay filtro, todas."""
+        if not self.asignado_a:
+            return True
+        return (normalizar_texto(self.asignado_a) or "") in (normalizar_texto(valor) or "\0")
 
     @staticmethod
     def _normalizar_identificador(valor) -> str | None:
