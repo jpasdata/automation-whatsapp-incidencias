@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.main import ejecutar_automatizacion  # noqa: E402
+from src.bot.main import ejecutar_automatizacion  # noqa: E402
 
 if __name__ == "__main__":
     ejecutar_automatizacion()

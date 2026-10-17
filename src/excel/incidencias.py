@@ -20,7 +20,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from . import unificar_excel as U
+from src.excel import unificar as U
 
 logger = logging.getLogger("incidencias_wa")
 
@@ -32,6 +32,14 @@ ENCABEZADO_ASIGNACION = [
     "Corregimiento", "NUMERO AVISO", "EVIDENCIA", "WINDY", "IMHPA", "NOTICIA", "ANEXO A", "ANEXO C", "ANEXO B", "OT", "anexo c enviados", "zona (2)",
 ]
 COLUMNAS_DEL_BOT = ("Estado_Automatico", "Ruta_Evidencia")
+
+
+def carpeta_de(cfg) -> Path:
+    """Carpeta de la base de incidencias según `excel.ruta_archivo` de config.yaml (relativa a la raíz del proyecto)."""
+    from src.nucleo.rutas import R
+
+    ruta = Path(cfg.excel.ruta_archivo)
+    return (ruta if ruta.is_absolute() else R.raiz / ruta).resolve().parent
 
 
 def preparar_carpeta(carpeta: Path) -> Path:
@@ -53,8 +61,11 @@ def leer_base(ruta: Path) -> dict[str, dict]:
     """{incidencia: fila} con las columnas por su nombre interno."""
     if not ruta.exists():
         return {}
-    ws = load_workbook(ruta, data_only=True, read_only=True)[U.NOMBRE_HOJA]
-    filas = [list(r) for r in ws.iter_rows(values_only=True)]
+    wb = load_workbook(ruta, data_only=True, read_only=True)
+    try:
+        filas = [list(r) for r in wb[U.NOMBRE_HOJA].iter_rows(values_only=True)]
+    finally:
+        wb.close()  # en modo lectura openpyxl deja el archivo abierto: en Windows impediría moverlo o reemplazarlo
     mapa = _titulo_a_clave()
     claves = [mapa.get(str(t).strip(), str(t).strip()) if t is not None else "" for t in filas[0]]
     base: dict[str, dict] = {}
@@ -70,6 +81,13 @@ def leer_base(ruta: Path) -> dict[str, dict]:
 def leer_archivo_nuevo(ruta: Path) -> list[tuple[str, int, dict]]:
     """[(origen, fila, datos)] de un Excel nuevo: formato de asignación (con o sin encabezado) o la propia base unificada."""
     wb = load_workbook(ruta, data_only=True, read_only=True)
+    try:
+        return _filas_de_libro(wb, ruta)
+    finally:
+        wb.close()
+
+
+def _filas_de_libro(wb, ruta: Path) -> list[tuple[str, int, dict]]:
     mapa = _titulo_a_clave()
     out: list[tuple[str, int, dict]] = []
     for hoja in wb.sheetnames:
@@ -92,11 +110,20 @@ def leer_archivo_nuevo(ruta: Path) -> list[tuple[str, int, dict]]:
 
 
 def _combinar_notas(fila: dict, nueva: str | None, fecha) -> None:
-    if not nueva or str(nueva).strip() in str(fila.get("EVIDENCIA") or ""):
+    """Suma la nota nueva a la existente sin duplicar: si es la misma, nada; si es una versión más completa de la anterior, la reemplaza."""
+    if not nueva:
         return
-    previa = fila.get("EVIDENCIA")
-    prefijo = f"{fecha:%d/%m}: " if isinstance(fecha, datetime) else ""
-    fila["EVIDENCIA"] = f"{previa}\n{prefijo}{str(nueva).strip()}" if previa else str(nueva).strip()
+    nueva = str(nueva).strip()
+    previa = str(fila.get("EVIDENCIA") or "").strip()
+    if not previa:
+        fila["EVIDENCIA"] = nueva
+    elif nueva in previa:
+        return
+    elif previa in nueva:                                     # la nueva contiene a la anterior: es la misma nota ampliada
+        fila["EVIDENCIA"] = nueva
+    else:
+        prefijo = f"{fecha:%d/%m}: " if isinstance(fecha, datetime) else ""
+        fila["EVIDENCIA"] = f"{previa}\n{prefijo}{nueva}"
 
 
 def fusionar(base: dict[str, dict], nuevas: list[tuple[str, int, dict]]) -> dict[str, int]:
@@ -133,8 +160,12 @@ def fusionar(base: dict[str, dict], nuevas: list[tuple[str, int, dict]]) -> dict
             lineas.append(f"{f0:%d/%m/%Y}" + (f" [{actual.get('Origen', 'base')}]" if isinstance(f0, datetime) else " (sin fecha)"))
         partes = [f"{k}: {v}" for k, v in diferencias.items()]
         lineas.append((f"{fecha_nueva:%d/%m/%Y}" if isinstance(fecha_nueva, datetime) else "(sin fecha)") + f" {marca}" + (" · " + " | ".join(partes) if partes else ""))
+        misma_asignacion = isinstance(fecha_nueva, datetime) and fecha_nueva == fecha_actual
+        if misma_asignacion:
+            lineas[-1] = lineas[-1].replace(f" {marca}", f" {marca} (actualización de la misma asignación)", 1)
         actual["Historial de asignaciones"] = "\n".join(lineas)
-        actual["N° de asignaciones"] = int(actual.get("N° de asignaciones") or 1) + 1
+        if not misma_asignacion:
+            actual["N° de asignaciones"] = int(actual.get("N° de asignaciones") or 1) + 1
         actual["Origen"] = ", ".join(dict.fromkeys([*str(actual.get("Origen", "")).split(", "), origen]))
         _combinar_notas(actual, d.get("EVIDENCIA"), fecha_nueva)
         nuevos_avisos = ["".join(m) for m in U.RX_AVISO.findall(str(d.get("NUMERO AVISO", "")))]
@@ -164,7 +195,7 @@ def incorporar_nuevas(carpeta: Path) -> dict:
     base = leer_base(ruta_base)
     if ruta_base.exists():
         shutil.copy2(ruta_base, carpeta / "respaldo" / f"INCIDENCIAS_BASE_{datetime.now():%Y%m%d_%H%M%S}.xlsx")
-    total = {"archivos": 0, "agregadas": 0, "actualizadas": 0, "sin_cambios": 0, "omitidos": []}
+    total = {"archivos": 0, "agregadas": 0, "actualizadas": 0, "sin_cambios": 0, "omitidos": [], "sin_mover": []}
     procesar: list[Path] = []
     for f in archivos:
         try:
@@ -185,6 +216,11 @@ def incorporar_nuevas(carpeta: Path) -> dict:
         procesar.append(f)
     if procesar:
         U._escribir({k: v for k, v in base.items()}, ruta_base)
+        total["sin_mover"] = []
         for f in procesar:
-            f.replace(carpeta / "procesadas" / f"{datetime.now():%Y%m%d_%H%M%S}_{f.name}")
+            try:
+                f.replace(carpeta / "procesadas" / f"{datetime.now():%Y%m%d_%H%M%S}_{f.name}")
+            except PermissionError:  # abierto en Excel: ya quedó incorporado (no se duplica); se moverá en la próxima corrida
+                logger.warning("'%s' ya se incorporó, pero está abierto en Excel y no se pudo mover a procesadas/: ciérralo.", f.name)
+                total["sin_mover"].append(f.name)
     return total

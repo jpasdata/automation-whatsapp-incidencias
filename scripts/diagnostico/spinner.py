@@ -2,11 +2,11 @@ import sys, time, json
 from pathlib import Path
 RAIZ = Path(sys.argv[1])
 sys.path.insert(0, str(RAIZ))
-from src.config import load_config
-from src.whatsapp_session import SesionWhatsApp
-from src.logger import setup_logger
-from src import whatsapp_reader as R
-from src.rueda import PresionContinua
+from src.nucleo.config import load_config
+from src.whatsapp.session import SesionWhatsApp
+from src.nucleo.logger import setup_logger
+from src.whatsapp import reader as R
+from src.whatsapp.rueda import PresionContinua
 
 cfg = load_config()
 log = setup_logger(cfg.logging.carpeta_logs, "WARNING")

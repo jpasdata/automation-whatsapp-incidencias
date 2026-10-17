@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from typing import Iterable
 
-from .modelos import Mensaje
+from src.nucleo.modelos import Mensaje
 
 RX_AVISO = re.compile(r"\b(5\d{2})-?(\d{4})\b")
 RX_INCID = re.compile(r"\b(11\d{5})\b")

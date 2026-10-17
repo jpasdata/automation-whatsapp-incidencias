@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
-from src.matcher import asociar_mensajes, extraer_codigo
-from src.modelos import Mensaje, TipoOrigenMatch
+from src.cruce.matcher import asociar_mensajes, extraer_codigo
+from src.nucleo.modelos import Mensaje, TipoOrigenMatch
 
 PATRON = r"\b\d{6,8}\b"
 

@@ -12,11 +12,13 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+from .rutas import R
 from typing import Any
 
 import yaml
 
-CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+CONFIG_DIR = R.config
 DEFAULT_CONFIG_PATH = CONFIG_DIR / "config.yaml"
 EXAMPLE_CONFIG_PATH = CONFIG_DIR / "config.example.yaml"
 
@@ -108,7 +110,7 @@ def resolver_cargar_desde(valor: str | None, hoy: datetime | None = None) -> dat
 
 def ventana_texto_de_grupo(cfg: "AppConfig", grupo: str) -> int:
     """Minutos hacia atrás/adelante para un texto con número del mismo remitente (propia del grupo si está configurada)."""
-    from .modelos import normalizar_texto
+    from src.nucleo.modelos import normalizar_texto
 
     g = normalizar_texto(grupo) or ""
     for fragmento, minutos in cfg.matching.ventana_minutos_por_grupo.items():
@@ -120,7 +122,7 @@ def ventana_texto_de_grupo(cfg: "AppConfig", grupo: str) -> int:
 
 def provincias_de_grupo(cfg: "AppConfig", grupo: str) -> set[str] | None:
     """Provincias del Excel (normalizadas) que atiende un grupo, o None si no está configurado (sin filtrar)."""
-    from .modelos import normalizar_texto
+    from src.nucleo.modelos import normalizar_texto
 
     g = (normalizar_texto(grupo) or "")
     for fragmento, provincias in cfg.matching.provincias_por_grupo.items():
@@ -225,7 +227,7 @@ def load_config(path: Path | str | None = None) -> AppConfig:
 
 
 if __name__ == "__main__":
-    # Chequeo manual rápido: python -m src.config
+    # Chequeo manual rápido: python -m src.nucleo.config
     try:
         cfg = load_config()
         print("Configuración cargada correctamente:")

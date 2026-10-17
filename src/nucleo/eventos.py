@@ -11,7 +11,9 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-CARPETA = Path(__file__).resolve().parent.parent / "logs"
+from .rutas import R
+
+CARPETA = R.logs  # setup_logger lo cambia a la carpeta de la corrida
 _lock = threading.Lock()
 
 
@@ -45,3 +47,29 @@ def registrar_csv(nombre: str, fila: dict) -> None:
 
 def evento(grupo: str, fase: str, accion: str, resultado: str = "ok", detalle: str = "") -> None:
     registrar_csv("eventos_bot.csv", {"grupo": grupo, "fase": fase, "accion": accion, "resultado": resultado, "detalle": detalle})
+
+
+def leer_todos(nombre: str, carpeta_logs: str | Path | None = None) -> list[dict]:
+    """Filas de `nombre` (p. ej. descargas_detalle.csv) de TODAS las corridas, de la más vieja a la más nueva (más el archivo suelto antiguo)."""
+    base = Path(carpeta_logs) if carpeta_logs else R.logs
+    rutas = sorted((base / "corridas").glob(f"*/*/{nombre}")) if (base / "corridas").exists() else []
+    suelto = base / nombre
+    if suelto.exists():
+        rutas.insert(0, suelto)
+    filas: list[dict] = []
+    for r in rutas:
+        try:
+            with open(r, newline="", encoding="utf-8-sig") as f:
+                filas.extend(csv.DictReader(f))
+        except OSError:
+            continue
+    return filas
+
+
+def ultima_corrida(carpeta_logs: str | Path | None = None, nombre: str | None = None) -> Path | None:
+    """Carpeta de la corrida más reciente (que contenga `nombre`, si se indica)."""
+    base = (Path(carpeta_logs) if carpeta_logs else R.logs) / "corridas"
+    if not base.exists():
+        return None
+    cands = sorted(p for p in base.glob("*/*") if p.is_dir() and (nombre is None or (p / nombre).exists()))
+    return cands[-1] if cands else None

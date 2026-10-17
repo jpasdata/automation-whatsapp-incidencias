@@ -7,7 +7,7 @@ fotos y videos** (organizados por día y por aviso/incidencia), **los cruza cont
 ## Inicio rápido
 
 1. Instalar Python 3.10+ y las dependencias: `pip install -r requirements.txt` y `python -m playwright install chromium`
-2. `Crear_config.bat` (crea `config/config.yaml` con los 4 grupos) y copiar el Excel a `data/RESULTADO_CREACION_INCIDENCIAS.xlsx`
+2. `Crear_config.bat` (crea `config/config.yaml` con los 4 grupos) y poner la base de incidencias en `data/Incidencias/INCIDENCIAS_BASE.xlsx` (o importar un traspaso)
 3. `python scripts/verificar_entorno.py` — revisa todo y dice **qué hacer** si algo falla (también corre solo antes de iniciar)
 4. `Iniciar_interfaz.bat` — interfaz con botón INICIAR/DETENER, modos, grupo, tiempo («hoy y N días antes») y panel en vivo
 5. La primera vez se abre WhatsApp Web: escanear el QR y **no cerrar la ventana** hasta ver los chats
@@ -27,9 +27,18 @@ fotos y videos** (organizados por día y por aviso/incidencia), **los cruza cont
 | Actualizar este PC | `Actualizar_proyecto.bat` (o botón «Actualizar desde GitHub») | Baja la versión nueva, quita residuos del proceso anterior, regenera `config.yaml` (deja `config.yaml.respaldo`) y verifica. No toca `data/` ni la sesión. |
 | Comportamiento del grupo | `python scripts/analizar_comportamiento.py` | Estadísticas de cómo reporta la gente (guía las ventanas de espera). |
 
+## Base de incidencias (`data/Incidencias/`)
+
+- **`INCIDENCIAS_BASE.xlsx`**: una sola hoja, una fila por incidencia, con todo lo del Excel original (7 hojas) y el historial de reasignaciones.
+- **Incidencias nuevas**: deja el Excel (el formato de asignación de siempre) en **`data/Incidencias/nuevas/`**. El vigilante lo detecta y lo
+  incorpora solo; también con el botón «Incorporar incidencias nuevas» o `python scripts/incidencias.py incorporar`. La incidencia nueva se agrega;
+  si ya existía, manda la última asignación y las anteriores quedan en «Historial de asignaciones». Soltar el mismo archivo dos veces no duplica nada.
+  El archivo pasa a `procesadas/` y antes de cada cambio se guarda una copia en `respaldo/`.
+- Crear la base desde el Excel original de varias hojas (una sola vez): `python scripts/incidencias.py crear`. El original queda intacto en `original/`.
+
 ## Resultados
 
-- **Excel en tiempo real** (se reescribe solo con cada novedad): `data/Reportes/`
+- **Excel en tiempo real** (se reescribe solo con cada novedad): `data/Reportes/en_vivo/`
   - `RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx` — copia de tu Excel con `Estado_Automatico` y `Ruta_Evidencia` en cada fila (verde/ámbar/rojo)
   - `Cruce_en_vivo.xlsx` — resumen, por incidencia, por día, descargas, sin cruce
   - El Excel original **nunca se modifica**. Si lo tienes abierto, el archivo queda bloqueado y se reintenta en la siguiente actualización.
@@ -38,9 +47,10 @@ fotos y videos** (organizados por día y por aviso/incidencia), **los cruza cont
   - `_otras_incidencias/Aviso-5633273/` — el chat trae un número que no está en el Excel
   - `_sin_numero/` — aún sin número (se espera el comentario; si llega horas después, el bot mueve los archivos)
   - `manifiesto_<día>.csv` — cada archivo con su remitente, leyenda, número que lo identificó y cómo
-- **Logs** (`logs/`): `automatizacion.log` (lo importante), `detalle.log` (todo, con función y línea; sirve para ubicar fallas),
-  `descargas_detalle.csv` (un registro por descarga, con el motivo si falló), `eventos_bot.csv` (hitos), `descargas_pendientes.csv`.
-  Lo viejo/de pruebas está en `logs/archivo/` (ver `logs/archivo/LEEME.txt`).
+- **Logs organizados por corrida** (`logs/corridas/<fecha>/<hora>_<modo>/`): `automatizacion_001.log` (lo importante), `detalle_001.log` (todo, con función y
+  línea; sirve para ubicar fallas), `descargas_detalle.csv` (un registro por descarga, con el motivo si falló), `eventos.csv` (hitos). Los logs se parten por
+  tamaño (`_002`, `_003`…) en vez de crecer sin fin. El botón «Abrir logs» va a la última corrida; `logs/estado/` guarda dónde quedó el vigilante;
+  lo viejo y las pruebas están en `logs/archivo/`.
 
 ## Más documentación (`docs/`)
 

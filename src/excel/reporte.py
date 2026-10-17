@@ -19,11 +19,12 @@ from openpyxl.chart import BarChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from .config import provincias_de_grupo
-from .cruce import cruzar
-from .descargas import etiqueta_identificador
-from .matcher import asociar_mensajes
-from .busqueda import cruces_de_grupo
+from src.nucleo.config import provincias_de_grupo
+from src.cruce.cruce import cruzar
+from src.bot.descargas import etiqueta_identificador
+from src.cruce.matcher import asociar_mensajes
+from src.cruce.busqueda import cruces_de_grupo
+from src.nucleo import eventos
 
 AZUL, GRIS = "1F3864", "F2F2F2"
 VERDE, AMBAR, ROJO, NEUTRO = "C6EFCE", "FFEB9C", "FFC7CE", "E7E6E6"
@@ -231,7 +232,7 @@ def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta
     # ---- Descargas ----------------------------------------------------------------------------
     # Fuente: el índice (todo lo descargado, siempre completo). El CSV de detalle solo aporta el motivo de un fallo.
     ws = wb.create_sheet("Descargas")
-    motivos = {d.get("id_mensaje"): d.get("error") for d in _leer_csv(carpeta_logs / "descargas_detalle.csv") if d.get("error")}
+    motivos = {d.get("id_mensaje"): d.get("error") for d in eventos.leer_todos("descargas_detalle.csv", carpeta_logs) if d.get("error")}
     filas = []
     for a in analisis:
         for d in sorted(a["descargas"], key=lambda x: (x["dia"], x["hora"])):

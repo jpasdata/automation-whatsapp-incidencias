@@ -1,7 +1,7 @@
 # Pruebas realizadas y cómo repetirlas
 
 ## Automáticas
-`python -m pytest -q` — ≈140 pruebas (lectura del DOM con HTML simulado, cruce, Excel, índice, descargas, vigilante, verificador).
+`python -m pytest -q` — ≈190 pruebas (lectura del DOM con HTML simulado, cruce, Excel, índice, descargas, vigilante, verificador).
 
 ## En vivo (`scripts/diagnostico/`, abren WhatsApp Web; usar con la sesión ya iniciada y sin otro proceso activo)
 Uso: `python scripts/diagnostico/<script>.py <ruta_del_proyecto>`
@@ -17,7 +17,7 @@ Uso: `python scripts/diagnostico/<script>.py <ruta_del_proyecto>`
 | `probe_v2.py` · `probe_solo_video.py` | El video es un flujo por rangos (no blob); descarga completa como `.mp4` |
 | `probe_repinta.py` · `probe_repinta2.py` | Que al bajar Web vuelve a pintar mensajes viejos (cobertura ≈90 %) |
 
-Salidas de las pruebas (capturas, JSON, textos): `logs/archivo/` (índice en `logs/archivo/LEEME.txt`).
+Salidas de las pruebas (capturas, JSON, textos): `logs/archivo/` (los scripts de diagnóstico escriben en `logs/archivo/`) (índice en `logs/archivo/LEEME.txt`).
 
 ## Corridas largas hechas
 - Histórico de Veraguas hasta el 1/10 (1.509 mensajes) y de Oeste/Coclé/Azuero hasta el 9/10 (límite del celular).

@@ -28,17 +28,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-from . import eventos
-from .config import provincias_de_grupo
-from .cruce import ResultadoCruce, cruzar
-from .descargas import RAIZ_EVIDENCIAS, TareaDescarga, slug_grupo, descargar_visibles, etiqueta_identificador, plan_descargas
-from .excel_manager import ExcelManager
-from .indice import Indice
-from .matcher import asociar_mensajes
-from .busqueda import cruces_de_grupo
-from .modelos import Mensaje
-from .whatsapp_reader import cargar_hacia_arriba, cosechar, leer_mensajes_recientes
-from .whatsapp_session import SesionWhatsApp
+from src.nucleo import eventos
+from src.nucleo.config import provincias_de_grupo
+from src.cruce.cruce import ResultadoCruce, cruzar
+from src.bot.descargas import RAIZ_EVIDENCIAS, TareaDescarga, slug_grupo, descargar_visibles, etiqueta_identificador, plan_descargas
+from src.excel.incidencias import archivos_nuevos, carpeta_de, incorporar_nuevas
+from src.excel.manager import ExcelManager
+from src.datos.indice import Indice
+from src.cruce.matcher import asociar_mensajes
+from src.cruce.busqueda import cruces_de_grupo
+from src.nucleo.modelos import Mensaje
+from src.whatsapp.reader import cargar_hacia_arriba, cosechar, leer_mensajes_recientes
+from src.whatsapp.session import SesionWhatsApp
 
 logger = logging.getLogger("incidencias_wa")
 
@@ -139,14 +140,14 @@ class Vigilante:
     def __init__(self, cfg, grupos: list[str], crear_excel: Callable[[], ExcelManager], ventana_horas: float = 48,
                  espera_huerfana_h: float = 6, intervalo_seg: tuple[int, int] = (150, 300), todo: bool = True,
                  raiz: Path = RAIZ_EVIDENCIAS, ruta_indice: Path | None = None, ponerse_al_dia: bool = False, excel_vivo=None):
-        from .historico import RUTA_INDICE
+        from src.datos.historico import RUTA_INDICE
 
         self.cfg, self.grupos, self.crear_excel = cfg, grupos, crear_excel
         self.ventana_horas, self.espera_huerfana_h, self.intervalo_seg = ventana_horas, espera_huerfana_h, intervalo_seg
         self.todo, self.raiz, self.ruta_indice = todo, raiz, ruta_indice or RUTA_INDICE
         self.ponerse_al_dia = ponerse_al_dia
         self._arranque: set[str] = set()
-        self.ruta_estado = Path(cfg.logging.carpeta_logs) / "vigilante_estado.json"
+        self.ruta_estado = Path(cfg.logging.carpeta_logs) / "estado" / "vigilante_estado.json"
         self.excel_vivo = excel_vivo
         self._al_dia: set[str] = set()
         self.excel: ExcelManager | None = None
@@ -155,6 +156,12 @@ class Vigilante:
 
     # --- Excel: se recarga si cambió el archivo o cada hora --------------------------------------
     def _excel_vigente(self) -> ExcelManager:
+        carpeta = carpeta_de(self.cfg)
+        if archivos_nuevos(carpeta):  # el usuario dejó incidencias nuevas: se incorporan a la base y se recarga
+            r = incorporar_nuevas(carpeta)
+            logger.info("INCIDENCIAS NUEVAS incorporadas a la base: %s", {k: v for k, v in r.items() if v})
+            eventos.evento("-", "incidencias", "incorporadas", "ok", str({k: v for k, v in r.items() if v}))
+            self.excel = None
         ruta = Path(self.cfg.excel.ruta_archivo)
         mtime = ruta.stat().st_mtime if ruta.exists() else 0
         if self.excel is None or mtime != self._excel_mtime or time.time() - self._excel_cargado_en > 3600:

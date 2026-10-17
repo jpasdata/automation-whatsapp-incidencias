@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from src.matcher import asociar_mensajes, extraer_candidatos, normalizar_candidato
-from src.modelos import Mensaje, TipoOrigenMatch
+from src.cruce.matcher import asociar_mensajes, extraer_candidatos, normalizar_candidato
+from src.nucleo.modelos import Mensaje, TipoOrigenMatch
 
 PATRON = r"\b\d{6,8}\b"
 BASE = datetime(2026, 10, 15, 10, 0)
@@ -108,7 +108,7 @@ def test_album_de_mas_de_4_fotos_coincide_con_la_cita_de_6():
 
 
 def test_limpiar_cita():
-    from src.whatsapp_reader import _limpiar_cita
+    from src.whatsapp.reader import _limpiar_cita
     assert _limpiar_cita("ic-image3 fotos") == "3 fotos"
     assert _limpiar_cita("ic-location-onUbicación") == "Ubicación"
     assert _limpiar_cita(None) is None

@@ -17,14 +17,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import eventos  # noqa: E402
-from src.bloqueo import SesionOcupada, candado_sesion  # noqa: E402
-from src.config import load_config, resolver_cargar_desde  # noqa: E402
-from src.excel_manager import ExcelManager  # noqa: E402
-from src.excel_vivo import ExcelEnVivo  # noqa: E402
-from src.logger import setup_logger  # noqa: E402
-from src.verificador import hay_errores, informe, verificar  # noqa: E402
-from src.vigilante import Vigilante  # noqa: E402
+from src.nucleo import eventos  # noqa: E402
+from src.nucleo.bloqueo import SesionOcupada, candado_sesion  # noqa: E402
+from src.nucleo.config import load_config, resolver_cargar_desde  # noqa: E402
+from src.excel.incidencias import carpeta_de, incorporar_nuevas  # noqa: E402
+from src.excel.manager import ExcelManager  # noqa: E402
+from src.excel.en_vivo import ExcelEnVivo  # noqa: E402
+from src.nucleo.logger import setup_logger  # noqa: E402
+from src.nucleo.verificador import hay_errores, informe, verificar  # noqa: E402
+from src.bot.vigilante import Vigilante  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="fragmento del título del grupo")
@@ -47,13 +48,13 @@ if sys.platform == "win32":  # que el PC no se duerma
 
 cfg = load_config()
 logger = setup_logger(cfg.logging.carpeta_logs, cfg.logging.nivel)
-eventos.configurar(cfg.logging.carpeta_logs)
 grupos_cfg = [g for g in cfg.whatsapp.grupos if g]
 grupos = grupos_cfg if args.todos else ([g for g in grupos_cfg if args.grupo.lower() in g.lower()] or [args.grupo]) if args.grupo else grupos_cfg[:1]
 lo, hi = (int(x) for x in args.intervalo.split("-"))
 
 
 def crear_excel() -> ExcelManager:
+    incorporar_nuevas(carpeta_de(cfg))  # lo que se haya dejado en data/Incidencias/nuevas/ entra a la base antes de leerla
     copia = Path(tempfile.mkdtemp()) / "copia.xlsx"
     shutil.copy(cfg.excel.ruta_archivo, copia)  # el original no se toca
     e = cfg.excel

@@ -22,8 +22,8 @@ from typing import Callable
 
 from playwright.sync_api import Locator, Page
 
-from .modelos import Mensaje
-from .whatsapp_session import SELECTORES
+from src.nucleo.modelos import Mensaje
+from src.whatsapp.session import SELECTORES
 
 logger = logging.getLogger("incidencias_wa")
 
@@ -288,7 +288,7 @@ def _sacudir_con_rueda(pagina: Page, rueda_real: bool = True, solo_subir: bool =
     Scroll humano para que WhatsApp pida más mensajes al celular (ver src/rueda.py): rueda real
     del sistema operativo si se puede, o la de Playwright como plan B.
     """
-    from .rueda import sacudir_humano
+    from src.whatsapp.rueda import sacudir_humano
 
     metodo = sacudir_humano(pagina, rueda_real, solo_subir)
     logger.debug("sacudida hecha con rueda %s", metodo)
@@ -369,7 +369,7 @@ def cargar_hacia_arriba(
     seguidos sin tanda se da por terminado. Para al llegar a `desde` o al agotar `max_seg`.
     Devuelve {"llego_desde", "burbujas", "segundos", "tandas", "ciclos"}.
     """
-    from .rueda import PresionContinua, ciclo_bajar_y_subir
+    from src.whatsapp.rueda import PresionContinua, ciclo_bajar_y_subir
 
     t0 = time.time()
     ahora = datetime.now()

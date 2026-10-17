@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
+
+from src.nucleo import eventos
+from src.nucleo.rutas import R
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parent.parent
 EXT_VIDEO = {".mp4", ".mov", ".webm", ".mkv", ".3gp"}
 
 
@@ -22,8 +24,8 @@ def _leer_csv(ruta: Path) -> list[dict]:
 
 
 def resumen(raiz_evidencias: Path | None = None, carpeta_logs: Path | None = None) -> str:
-    raiz_evidencias = raiz_evidencias or RAIZ / "data" / "Evidencias_WhatsApp"
-    carpeta_logs = carpeta_logs or RAIZ / "logs"
+    raiz_evidencias = raiz_evidencias or R.evidencias
+    carpeta_logs = carpeta_logs or R.logs
     por_dia: dict[tuple[str, str], dict] = defaultdict(lambda: {"fotos": 0, "videos": 0, "bytes": 0, "incid": set()})
     if raiz_evidencias.exists():
         for f in raiz_evidencias.rglob("*"):
@@ -36,10 +38,11 @@ def resumen(raiz_evidencias: Path | None = None, carpeta_logs: Path | None = Non
 
     # último resultado por mensaje (un mensaje puede reintentarse)
     ultimo: dict[str, dict] = {}
-    for fila in _leer_csv(carpeta_logs / "descargas_detalle.csv"):
+    for fila in eventos.leer_todos("descargas_detalle.csv", carpeta_logs):   # todas las corridas; la última fila de cada mensaje manda
         ultimo[fila.get("id_mensaje", "")] = fila
     errores = [f for f in ultimo.values() if f.get("resultado") in ("error", "parcial")]
-    pendientes = _leer_csv(carpeta_logs / "descargas_pendientes.csv")
+    carpeta_p = eventos.ultima_corrida(carpeta_logs, "descargas_pendientes.csv")
+    pendientes = _leer_csv(carpeta_p / "descargas_pendientes.csv") if carpeta_p else []
 
     lineas = ["=== ESTADO DE DESCARGAS ===", "", "En disco (lo realmente descargado):",
               f"{'Grupo':36} {'Día':10} {'Fotos':>6} {'Videos':>6} {'MB':>8}  Incidencias"]

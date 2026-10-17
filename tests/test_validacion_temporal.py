@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from src.validacion_temporal import verificar_ventana_horaria
+from src.cruce.validacion_temporal import verificar_ventana_horaria
 
 FECHA_DETECCION = datetime(2026, 10, 4, 12, 52)
 FECHA_SR = datetime(2026, 10, 4, 17, 17)

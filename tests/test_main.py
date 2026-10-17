@@ -8,10 +8,10 @@ from pathlib import Path
 import openpyxl
 import pytest
 
-from src import main
-from src.config import AppConfig, ExcelConfig, LoggingConfig, MatchingConfig, NotificacionesConfig, RutasConfig, WhatsAppConfig
-from src.excel_manager import ExcelManager
-from src.modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
+from src.bot import main
+from src.nucleo.config import AppConfig, ExcelConfig, LoggingConfig, MatchingConfig, NotificacionesConfig, RutasConfig, WhatsAppConfig
+from src.excel.manager import ExcelManager
+from src.nucleo.modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
 
 LOGGER = logging.getLogger("incidencias_wa")
 

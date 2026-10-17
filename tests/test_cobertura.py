@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.cobertura import cobertura, resumen_cobertura
-from src.cruce import ResultadoCruce
-from src.excel_manager import FilaIncidencia
-from src.modelos import CriterioBusqueda, Mensaje, ResultadoMatch, TipoOrigenMatch
-from src.validacion_temporal import ResultadoValidacionTemporal
+from src.datos.cobertura import cobertura, resumen_cobertura
+from src.cruce.cruce import ResultadoCruce
+from src.excel.manager import FilaIncidencia
+from src.nucleo.modelos import CriterioBusqueda, Mensaje, ResultadoMatch, TipoOrigenMatch
+from src.cruce.validacion_temporal import ResultadoValidacionTemporal
 
 
 def _fila(n, det=datetime(2026, 10, 10, 8, 0)):

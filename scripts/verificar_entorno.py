@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.verificador import hay_errores, informe, verificar  # noqa: E402
+from src.nucleo.verificador import hay_errores, informe, verificar  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 resultados = verificar()

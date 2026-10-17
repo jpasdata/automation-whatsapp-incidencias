@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from src.rueda import MUESCA, plan_humano
+from src.whatsapp.rueda import MUESCA, plan_humano
 
 
 def test_plan_humano_baja_pausa_y_sube_mas():
@@ -26,7 +26,7 @@ def test_rafaga_humana_ritmo_y_proporcion(monkeypatch):
     """La ráfaga reproduce el patrón medido: ~5 giros, casi siempre hacia arriba, con bajadas esporádicas."""
     import time as _t
 
-    from src import rueda
+    from src.whatsapp import rueda
 
     monkeypatch.setattr(_t, "sleep", lambda s: None)
     class P:  # página falsa: sin cursor real
@@ -48,7 +48,7 @@ def test_calentamiento_hace_varios_ciclos_con_subidas_y_bajadas(monkeypatch):
     import random as _r
     import time as _t
 
-    from src.whatsapp_reader import _calentar
+    from src.whatsapp.reader import _calentar
 
     reloj = {"t": 0.0}
     monkeypatch.setattr(_t, "time", lambda: reloj["t"])
@@ -74,7 +74,7 @@ def test_calentamiento_hace_varios_ciclos_con_subidas_y_bajadas(monkeypatch):
 def test_ciclo_bajar_y_subir_sube_mas_de_lo_que_baja(monkeypatch):
     import time as _t
 
-    from src import rueda
+    from src.whatsapp import rueda
 
     monkeypatch.setattr(_t, "sleep", lambda s: None)
     giros = []

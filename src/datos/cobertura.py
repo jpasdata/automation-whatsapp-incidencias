@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .cruce import ResultadoCruce
-from .excel_manager import FilaIncidencia
+from src.cruce.cruce import ResultadoCruce
+from src.excel.manager import FilaIncidencia
 
 COLUMNAS = [
     "fila_excel", "cod_incidencia", "incidencia", "numero_aviso", "elemento", "provincia",

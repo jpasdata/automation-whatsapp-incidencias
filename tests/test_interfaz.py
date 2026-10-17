@@ -15,7 +15,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "scripts"))
 
 import interfaz as ui_mod  # noqa: E402
-from src.verificador import ERROR, OK, Resultado  # noqa: E402
+from src.nucleo.verificador import ERROR, OK, Resultado  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +46,7 @@ def ui(raiz_tk):
 
 
 def _cfg():
-    from src.config import load_config
+    from src.nucleo.config import load_config
 
     return load_config()
 
@@ -95,11 +95,13 @@ def test_estado_de_descargas_muestra_el_resumen(ui, monkeypatch):
 def test_abrir_excel_en_vivo_existe_y_no_existe(ui, monkeypatch, tmp_path):
     abiertos = []
     monkeypatch.setattr(ui_mod.os, "startfile", lambda r: abiertos.append(Path(r)), raising=False)
-    monkeypatch.setattr(ui_mod, "RAIZ", tmp_path)
+    from src.nucleo.rutas import Rutas
+
+    monkeypatch.setattr(ui_mod, "R", Rutas(tmp_path))
     ui.abrir_excel_vivo()
     assert abiertos == [] and "Aún no hay Excel en vivo" in ui.estado.get()
-    (tmp_path / "data" / "Reportes").mkdir(parents=True)
-    f = tmp_path / "data" / "Reportes" / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
+    (tmp_path / "data" / "Reportes" / "en_vivo").mkdir(parents=True)
+    f = tmp_path / "data" / "Reportes" / "en_vivo" / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
     f.write_bytes(b"x")
     ui.abrir_excel_vivo()
     assert abiertos == [f]
@@ -271,3 +273,19 @@ def test_importar_se_niega_si_el_bot_corre(ui, monkeypatch):
     ui.btn.configure(text="■  DETENER")
     ui.importar_traspaso()
     assert len(avisos) == 1
+
+
+def test_abrir_logs_va_a_la_ultima_corrida_y_las_incidencias_se_incorporan(ui, monkeypatch, tmp_path):
+    abiertos, llamadas = [], []
+    monkeypatch.setattr(ui_mod.os, "startfile", lambda r: abiertos.append(Path(r)), raising=False)
+    from src.nucleo.rutas import Rutas
+
+    monkeypatch.setattr(ui_mod, "R", Rutas(tmp_path))
+    ui.abrir_logs()                                                  # sin corridas: abre logs/
+    (tmp_path / "logs" / "corridas" / "2026-10-17" / "083000_vigilante").mkdir(parents=True)
+    (tmp_path / "logs" / "corridas" / "2026-10-17" / "091500_vigilante").mkdir(parents=True)
+    ui.abrir_logs()
+    assert abiertos[0] == tmp_path / "logs" and abiertos[1].name == "091500_vigilante"
+    monkeypatch.setattr(ui, "_ejecutar", lambda args: (llamadas.append(args), subprocess.CompletedProcess(args, 0, "Incorporado: 1 archivo(s)", ""))[1])
+    ui.incorporar_incidencias()
+    assert llamadas == [["scripts/incidencias.py", "incorporar"]] and ui.estado.get() == "Incidencias incorporadas"

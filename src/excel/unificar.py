@@ -246,6 +246,7 @@ def unificar(ruta_original: Path, ruta_salida: Path, hoja_principal: str = "Asig
                     if r.get(k):
                         clave = f"Acciones · {k}"
                         actual[clave] = (actual.get(clave) + "\n" if actual.get(clave) else "") + str(r[k])
+    wb.close()  # libera el archivo original (en Windows queda bloqueado mientras esté abierto)
     return _escribir(unificadas, ruta_salida)
 
 

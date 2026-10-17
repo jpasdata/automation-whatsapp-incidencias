@@ -26,12 +26,14 @@ except ImportError:
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from src.config import load_config  # noqa: E402
-from src.descargas import RAIZ_EVIDENCIAS  # noqa: E402
-from src.estado_descargas import resumen as resumen_descargas  # noqa: E402
-from src.historico import RUTA_INDICE  # noqa: E402
-from src.indice import Indice  # noqa: E402
-from src.verificador import hay_errores, informe, verificar  # noqa: E402
+from src.nucleo.config import load_config  # noqa: E402
+from src.nucleo.rutas import R  # noqa: E402
+from src.nucleo import eventos  # noqa: E402
+from src.bot.descargas import RAIZ_EVIDENCIAS  # noqa: E402
+from src.datos.estado_descargas import resumen as resumen_descargas  # noqa: E402
+from src.datos.historico import RUTA_INDICE  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
+from src.nucleo.verificador import hay_errores, informe, verificar  # noqa: E402
 
 TODOS = "(TODOS los grupos, uno tras otro)"
 # modo -> (script, opciones fijas)
@@ -96,7 +98,9 @@ class Interfaz:
         boton("📊  Abrir Excel en vivo", self.abrir_excel_vivo)
         boton("🧾  Generar reporte Excel", self.generar_reporte)
         boton("🗂  Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS))
-        boton("📜  Abrir logs", lambda: os.startfile(RAIZ / "logs"))
+        boton("📜  Abrir logs (última corrida)", self.abrir_logs)
+        boton("🗒  Abrir carpeta de incidencias", lambda: os.startfile(R.incidencias))
+        boton("➕  Incorporar incidencias nuevas", self.incorporar_incidencias)
         seccion("Mantenimiento")
         boton("🧹  Limpiar y ordenar", self.limpiar)
         boton("⬇  Actualizar desde GitHub", self.actualizar_proyecto)
@@ -261,11 +265,27 @@ class Interfaz:
 
     def abrir_excel_vivo(self) -> None:
         """Abre el Excel cruzado que el bot reescribe solo (data/Reportes/RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx)."""
-        ruta = RAIZ / "data" / "Reportes" / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
+        ruta = R.reportes_en_vivo / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
         if ruta.exists():
             os.startfile(ruta)
         else:
             self._estado("Aún no hay Excel en vivo (se crea con la primera vuelta)", AMBAR)
+
+    def abrir_logs(self) -> None:
+        """Abre la carpeta de la corrida más reciente (o logs/ si todavía no hay ninguna)."""
+        ultima = eventos.ultima_corrida(R.logs)
+        os.startfile(ultima or R.logs)
+
+    def incorporar_incidencias(self) -> None:
+        """Mezcla en la base lo que hayas dejado en data/Incidencias/nuevas/ (el vigilante también lo hace solo)."""
+        if self._corriendo():
+            messagebox.showwarning("Incorporar incidencias", "Detén primero el bot (botón DETENER) y vuelve a intentar; el vigilante ya incorpora solo.")
+            return
+        self._estado("Incorporando incidencias…", AZUL)
+        self.r.update_idletasks()
+        p = self._ejecutar(["scripts/incidencias.py", "incorporar"])
+        self._mostrar((p.stdout + p.stderr).strip())
+        self._estado("Incidencias incorporadas" if p.returncode == 0 else "Error al incorporar incidencias", VERDE if p.returncode == 0 else ROJO)
 
     def _ejecutar(self, args: list[str]) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, *args], cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -310,7 +330,7 @@ class Interfaz:
         self._mostrar((p.stdout + p.stderr).strip())
         self._estado("Traspaso listo (data/Traspasos)" if p.returncode == 0 else "Error al crear el traspaso", VERDE if p.returncode == 0 else ROJO)
         if p.returncode == 0:
-            os.startfile(RAIZ / "data" / "Traspasos")
+            os.startfile(R.traspasos)
 
     def importar_traspaso(self) -> None:
         """Elige un .zip de traspaso y lo mezcla en este PC (índice, evidencias y rutas); respalda lo que había."""
@@ -335,9 +355,9 @@ class Interfaz:
         self.r.update_idletasks()
         p = self._ejecutar(orden)
         self._mostrar((p.stdout + p.stderr).strip())
-        self._estado("Reporte listo (data/Reportes)" if p.returncode == 0 else "Error al generar el reporte", VERDE if p.returncode == 0 else ROJO)
+        self._estado("Reporte listo (data/Reportes/historial)" if p.returncode == 0 else "Error al generar el reporte", VERDE if p.returncode == 0 else ROJO)
         if p.returncode == 0:
-            os.startfile(RAIZ / "data" / "Reportes")
+            os.startfile(R.reportes_historial)
 
     def armar_comando(self) -> list[str]:
         script, fijas = MODOS[self.modo.get()]

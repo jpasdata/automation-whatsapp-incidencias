@@ -3,7 +3,7 @@ from pathlib import Path
 RAIZ = Path(sys.argv[1])
 sys.path.insert(0, str(RAIZ))
 from playwright.sync_api import sync_playwright
-from src.config import load_config
+from src.nucleo.config import load_config
 
 cfg = load_config()
 with sync_playwright() as pw:

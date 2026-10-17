@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from src.historico import tabla_por_dia, verificar_historico
-from src.indice import Indice
-from src.modelos import Mensaje
+from src.datos.historico import tabla_por_dia, verificar_historico
+from src.datos.indice import Indice
+from src.nucleo.modelos import Mensaje
 
 
 def _m(id_, ts, adj=0, texto=None, remitente="Juan", cita=None):

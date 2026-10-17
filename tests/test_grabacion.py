@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.grabacion import resumir
+from src.whatsapp.grabacion import resumir
 
 
 def test_resumir_rafagas_y_pausas():

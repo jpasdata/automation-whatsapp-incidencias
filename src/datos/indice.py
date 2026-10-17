@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
-from .modelos import Mensaje
+from src.nucleo.modelos import Mensaje
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS mensajes (

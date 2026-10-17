@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
-from .modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
+from src.nucleo.modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
 
 # Elementos como "F-15966", "F:08976", "F08977": prefijo F + 3-6 dígitos.
 PATRON_ELEMENTO_DEFECTO = r"\bF[\s:\-#]?\d{3,6}\b"

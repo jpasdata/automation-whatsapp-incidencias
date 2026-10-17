@@ -17,13 +17,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.cobertura import COLUMNAS, cobertura, resumen_cobertura  # noqa: E402
-from src.config import load_config, provincias_de_grupo  # noqa: E402
-from src.cruce import cruzar  # noqa: E402
-from src.excel_manager import ExcelManager  # noqa: E402
-from src.historico import RUTA_INDICE  # noqa: E402
-from src.indice import Indice  # noqa: E402
-from src.matcher import asociar_mensajes  # noqa: E402
+from src.datos.cobertura import COLUMNAS, cobertura, resumen_cobertura  # noqa: E402
+from src.nucleo.rutas import R  # noqa: E402
+from src.nucleo.config import load_config, provincias_de_grupo  # noqa: E402
+from src.cruce.cruce import cruzar  # noqa: E402
+from src.excel.manager import ExcelManager  # noqa: E402
+from src.datos.historico import RUTA_INDICE  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
+from src.cruce.matcher import asociar_mensajes  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="Fragmento del título del grupo (default: el primero de config.yaml)")
@@ -59,7 +60,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # el Excel
 
 filas_cob = sorted(cobertura(filas, cruces), key=lambda r: (r["fecha_deteccion"] or datetime.min, r["fila_excel"]))
 
-salida = Path(cfg.logging.carpeta_logs) / f"cobertura_{''.join(c if c.isalnum() else '_' for c in grupo)[:40]}.csv"
+salida = R.reportes_analisis / f"cobertura_{''.join(c if c.isalnum() else '_' for c in grupo)[:40]}.csv"
 salida.parent.mkdir(parents=True, exist_ok=True)
 with open(salida, "w", newline="", encoding="utf-8-sig") as fh:  # utf-8-sig: Excel abre bien las tildes
     w = csv.DictWriter(fh, fieldnames=COLUMNAS, delimiter=";")

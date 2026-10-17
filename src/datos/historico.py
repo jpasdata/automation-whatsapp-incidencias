@@ -16,9 +16,11 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from .config import AppConfig
-from .indice import Indice, ResumenDia
-from .whatsapp_reader import (
+from src.nucleo import eventos
+from src.nucleo.config import AppConfig
+from src.nucleo.rutas import R
+from src.datos.indice import Indice, ResumenDia
+from src.whatsapp.reader import (
     cargar_hacia_arriba,
     construir_mensajes,
     cosechar,
@@ -26,9 +28,9 @@ from .whatsapp_reader import (
     leer_instantanea,
     leer_mensajes_recientes,
 )
-from .whatsapp_session import SesionWhatsApp
+from src.whatsapp.session import SesionWhatsApp
 
-RUTA_INDICE = Path(__file__).resolve().parent.parent / "data" / "indice" / "indice.sqlite3"
+RUTA_INDICE = R.indice_db
 
 
 def tabla_por_dia(resumen: list[ResumenDia], desde: date, hasta: date) -> str:
@@ -96,7 +98,7 @@ def cargar_historico(
         cfg.whatsapp.carpeta_sesion, headless=cfg.whatsapp.headless, logger=logger
     ) as sesion:
         sesion.abrir_chat(grupo)
-        from .descargas import RAIZ_EVIDENCIAS
+        from src.bot.descargas import RAIZ_EVIDENCIAS
 
         arregladas = indice.rebasar_rutas(RAIZ_EVIDENCIAS)
         if arregladas:
@@ -109,8 +111,8 @@ def cargar_historico(
                 descargador.barrido_final(sesion.pagina)
         finally:
             if descargador is not None:
-                n = descargador.escribir_pendientes(Path(cfg.logging.carpeta_logs) / "descargas_pendientes.csv")
-                logger.info("Descargas: %d mensajes bajados, %d fallidos, %d pendientes (logs/descargas_pendientes.csv).",
+                n = descargador.escribir_pendientes(eventos.CARPETA / "descargas_pendientes.csv")
+                logger.info("Descargas: %d mensajes bajados, %d fallidos, %d pendientes (descargas_pendientes.csv en la carpeta de esta corrida).",
                             descargador.total_ok, descargador.total_mal, n)
 
 
@@ -199,7 +201,7 @@ def capturar_mientras_scrollea(
         sesion.abrir_chat(grupo)
         logger.info("LISTO: haz scroll con el mouse en el chat (bajar y subir); yo solo guardo lo que aparezca.")
         if grabar_eventos:
-            from . import grabacion
+            from src.whatsapp import grabacion
 
             sesion.pagina.evaluate(grabacion.JS_GRABAR)
             eventos_cache: list[dict] = []
@@ -263,7 +265,7 @@ def capturar_mientras_scrollea(
                 pass
             if grabar_eventos:
                 try:
-                    from . import grabacion
+                    from src.whatsapp import grabacion
 
                     try:
                         eventos = sesion.pagina.evaluate(grabacion.JS_LEER)
@@ -271,7 +273,8 @@ def capturar_mientras_scrollea(
                         eventos = eventos_cache
                     resumen = grabacion.resumir(eventos)
                     resumen["llegadas_de_mensajes"] = llegadas
-                    ruta = Path(cfg.logging.carpeta_logs) / "scroll_manual.json"
+                    ruta = Path(cfg.logging.carpeta_logs) / "archivo" / "scroll_manual.json"
+                    ruta.parent.mkdir(parents=True, exist_ok=True)
                     ruta.write_text(json.dumps({"resumen": resumen, "eventos": eventos[:3000]}, ensure_ascii=False), encoding="utf-8")
                     logger.info("Patrón de tu scroll guardado en %s: %s", ruta, json.dumps(resumen, ensure_ascii=False)[:900])
                 except Exception as e:  # noqa: BLE001

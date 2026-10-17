@@ -13,10 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.bloqueo import SesionOcupada, candado_sesion  # noqa: E402
-from src.config import load_config  # noqa: E402
-from src.historico import actualizar_incremental  # noqa: E402
-from src.logger import setup_logger  # noqa: E402
+from src.nucleo.bloqueo import SesionOcupada, candado_sesion  # noqa: E402
+from src.nucleo.config import load_config  # noqa: E402
+from src.datos.historico import actualizar_incremental  # noqa: E402
+from src.nucleo.logger import setup_logger  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="Fragmento del título de un solo grupo")

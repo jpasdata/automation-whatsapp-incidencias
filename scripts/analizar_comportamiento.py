@@ -6,9 +6,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.comportamiento import analizar, informe  # noqa: E402
-from src.historico import RUTA_INDICE  # noqa: E402
-from src.indice import Indice  # noqa: E402
+from src.nucleo.rutas import R  # noqa: E402
+from src.cruce.comportamiento import analizar, informe  # noqa: E402
+from src.datos.historico import RUTA_INDICE  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--grupo", help="fragmento del título; por defecto todos los indexados")
@@ -19,7 +20,7 @@ with Indice(RUTA_INDICE) as ix:
         if args.grupo and args.grupo.lower() not in g.lower():
             continue
         texto = informe(analizar(ix.mensajes(g)), g)
-        salida = Path("data/Reportes") / f"comportamiento_{''.join(c if c.isalnum() else '_' for c in g)[:40]}.md"
+        salida = R.reportes_analisis / f"comportamiento_{''.join(c if c.isalnum() else '_' for c in g)[:40]}.md"
         salida.parent.mkdir(parents=True, exist_ok=True)
         salida.write_text(texto, encoding="utf-8")
         print(texto)

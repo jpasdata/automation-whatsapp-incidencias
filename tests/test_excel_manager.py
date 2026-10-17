@@ -3,13 +3,13 @@ from datetime import datetime
 import openpyxl
 import pytest
 
-from src.excel_manager import (
+from src.excel.manager import (
     ExcelManager,
     ExcelManagerError,
     categorizar_nota_evidencia,
     extraer_numero_elemento,
 )
-from src.modelos import CriterioBusqueda
+from src.nucleo.modelos import CriterioBusqueda
 
 
 @pytest.mark.parametrize(
@@ -293,7 +293,7 @@ def test_filtro_por_provincia_y_sin_datos(tmp_path):
 
 
 def test_provincias_de_grupo():
-    from src.config import MatchingConfig, provincias_de_grupo
+    from src.nucleo.config import MatchingConfig, provincias_de_grupo
 
     class Cfg:  # basta con el atributo que usa la función
         matching = MatchingConfig("x", 15, provincias_por_grupo={

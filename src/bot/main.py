@@ -21,14 +21,14 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from .config import AppConfig, load_config, provincias_de_grupo, resolver_cargar_desde
-from .excel_manager import ExcelManager
-from .logger import setup_logger
-from .matcher import asociar_mensajes
-from .modelos import CriterioBusqueda, TipoOrigenMatch
-from .validacion_temporal import verificar_ventana_horaria
-from .whatsapp_reader import descargar_adjunto, leer_mensajes_recientes
-from .whatsapp_session import SELECTORES, SesionWhatsApp
+from src.nucleo.config import AppConfig, load_config, provincias_de_grupo, resolver_cargar_desde
+from src.excel.manager import ExcelManager
+from src.nucleo.logger import setup_logger
+from src.cruce.matcher import asociar_mensajes
+from src.nucleo.modelos import CriterioBusqueda, TipoOrigenMatch
+from src.cruce.validacion_temporal import verificar_ventana_horaria
+from src.whatsapp.reader import descargar_adjunto, leer_mensajes_recientes
+from src.whatsapp.session import SELECTORES, SesionWhatsApp
 
 
 def ejecutar_automatizacion() -> None:

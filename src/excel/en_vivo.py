@@ -13,8 +13,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import eventos
-from .reporte_excel import analizar_grupo, escribir_cruzado, generar_reporte
+from src.nucleo import eventos
+from src.nucleo.rutas import R
+from src.excel.reporte import analizar_grupo, escribir_cruzado, generar_reporte
 
 logger = logging.getLogger("incidencias_wa")
 
@@ -22,7 +23,7 @@ logger = logging.getLogger("incidencias_wa")
 class ExcelEnVivo:
     def __init__(self, cfg, desde: datetime, grupos: list[str], carpeta: Path | None = None, min_segundos: float = 90):
         self.cfg, self.desde, self.grupos, self.min_segundos = cfg, desde, grupos, min_segundos
-        self.carpeta = carpeta or Path(__file__).resolve().parent.parent / "data" / "Reportes"
+        self.carpeta = carpeta or R.reportes_en_vivo
         self._ultimo = 0.0
         self.ruta_reporte = self.carpeta / "Cruce_en_vivo.xlsx"
         self.ruta_cruzado = self.carpeta / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"

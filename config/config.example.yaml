@@ -16,8 +16,8 @@ whatsapp:
   headless: false                           # arrancar en false mientras se valida; luego puede pasar a true
 
 excel:
-  ruta_archivo: "./data/RESULTADO_CREACION_INCIDENCIAS.xlsx"
-  nombre_hoja: "Asignacion- SEP"
+  ruta_archivo: "./data/Incidencias/INCIDENCIAS_BASE.xlsx"   # la base (una hoja). Las incidencias nuevas se dejan en data/Incidencias/nuevas/
+  nombre_hoja: "Incidencias"
   columna_codigo_largo: "COD-INCIDENCIA"    # ej. 011682220001
   columna_codigo_corto: "Incidencia"        # ej. 1168222
   columna_evidencia_manual: "EVIDENCIA"     # notas libres existentes de Jeam/Henry — NO se sobreescribe
@@ -32,9 +32,9 @@ excel:
   # Relaciona cada incidencia con un grupo: un grupo solo cruza contra las filas de sus provincias.
   columna_provincia: "Provincia"
   # Más hojas del mismo Excel con incidencias asignadas (se cruzan igual; las repetidas de la hoja principal se ignoran).
-  hojas_extra:
-    - "OCTUBRE"
-    - "c ya entregados sin correo"
+  # Solo se cruzan las filas con este responsable en la columna "Asignado a" (las demás quedan en la base pero el bot las ignora).
+  asignado_a: "Henry"
+  hojas_extra: []   # ya no hacen falta: la base unifica todas las hojas
 
 # --- PENDIENTE DE DEFINIR (ver Fase 0 / README) ---
 # El formato real del código que escriben en el grupo todavía no está confirmado.

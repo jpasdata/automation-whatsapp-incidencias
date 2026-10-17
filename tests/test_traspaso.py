@@ -1,9 +1,9 @@
 from datetime import datetime
 from pathlib import Path
 
-from src.indice import Indice
-from src.modelos import Mensaje
-from src.traspaso import exportar, importar
+from src.datos.indice import Indice
+from src.nucleo.modelos import Mensaje
+from src.datos.traspaso import exportar, importar
 
 
 def _msg(id_, minuto=0):
@@ -54,7 +54,8 @@ def test_fusionar_agrega_lo_que_falta_y_no_pisa_lo_que_ya_hay(tmp_path):
 def test_exportar_e_importar_en_otro_pc_conserva_todo_y_reapunta_las_rutas(tmp_path):
     pc1, pc2 = tmp_path / "pc1", tmp_path / "pc2"
     _pc(pc1, [_msg("m1"), _msg("m2", 1)], {"m1": "Veraguas/2026-10-09/Inc-1/a_1.jpg", "m2": "Veraguas/2026-10-09/_sin_numero/b_1.jpg"})
-    (pc1 / "data" / "RESULTADO_CREACION_INCIDENCIAS.xlsx").write_bytes(b"excel")
+    (pc1 / "data" / "Incidencias").mkdir(parents=True, exist_ok=True)
+    (pc1 / "data" / "Incidencias" / "INCIDENCIAS_BASE.xlsx").write_bytes(b"excel")
     zip_ = exportar(pc1, tmp_path / "t.zip")
     assert zip_.exists()
     # el otro PC ya había avanzado por su cuenta con otro mensaje
@@ -68,7 +69,7 @@ def test_exportar_e_importar_en_otro_pc_conserva_todo_y_reapunta_las_rutas(tmp_p
             assert Path(ruta).exists() and str(pc2) in ruta          # todas las rutas apuntan a ESTE PC y existen
     assert list((pc2 / "data" / "indice" / "respaldo").glob("indice_antes_de_importar_*.sqlite3"))
     # sin --excel no se toca el Excel local
-    assert not (pc2 / "data" / "RESULTADO_CREACION_INCIDENCIAS.xlsx").exists()
+    assert not (pc2 / "data" / "Incidencias" / "INCIDENCIAS_BASE.xlsx").exists()
     # importar otra vez no duplica ni falla
     otra = importar(pc2, zip_)
     assert otra["evidencias_copiadas"] == 0 and otra["evidencias_ya_existian"] == 2 and otra["mensajes_nuevos"] == 0
@@ -77,9 +78,13 @@ def test_exportar_e_importar_en_otro_pc_conserva_todo_y_reapunta_las_rutas(tmp_p
 def test_importar_con_excel_deja_copia_del_anterior(tmp_path):
     pc1, pc2 = tmp_path / "pc1", tmp_path / "pc2"
     _pc(pc1, [_msg("m1")])
-    (pc1 / "data" / "RESULTADO_CREACION_INCIDENCIAS.xlsx").write_bytes(b"nuevo")
+    (pc1 / "data" / "Incidencias").mkdir(parents=True, exist_ok=True)
+    (pc1 / "data" / "Incidencias" / "INCIDENCIAS_BASE.xlsx").write_bytes(b"nuevo")
     _pc(pc2, [])
-    (pc2 / "data" / "RESULTADO_CREACION_INCIDENCIAS.xlsx").write_bytes(b"viejo")
+    (pc2 / "data" / "Incidencias").mkdir(parents=True, exist_ok=True)
+    (pc2 / "data" / "Incidencias" / "INCIDENCIAS_BASE.xlsx").write_bytes(b"viejo")
     importar(pc2, exportar(pc1, tmp_path / "t.zip"), con_excel=True)
-    assert (pc2 / "data" / "RESULTADO_CREACION_INCIDENCIAS.xlsx").read_bytes() == b"nuevo"
-    assert any(f.read_bytes() == b"viejo" for f in (pc2 / "data").glob("RESULTADO_CREACION_INCIDENCIAS_antes_*.xlsx"))
+    assert (pc2 / "data" / "Incidencias" / "INCIDENCIAS_BASE.xlsx").read_bytes() == b"nuevo"
+    assert any(f.read_bytes() == b"viejo" for f in (pc2 / "data" / "Incidencias" / "respaldo").glob("INCIDENCIAS_BASE_antes_de_importar_*.xlsx"))
+    for sub in ("nuevas", "procesadas", "respaldo", "original"):
+        assert (pc2 / "data" / "Incidencias" / sub).is_dir()

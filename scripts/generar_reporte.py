@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Genera el reporte en Excel (con formato): resumen, por incidencia, por día, descargas y lo que no cruzó.
-Solo lee el índice y el Excel de incidencias; escribe un archivo nuevo en data/Reportes/.
+Solo lee el índice y el Excel de incidencias; escribe un archivo nuevo en data/Reportes/historial/.
 
 Uso:
     python scripts/generar_reporte.py --desde 2026-10-01
@@ -16,18 +16,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import load_config, resolver_cargar_desde  # noqa: E402
-from src.excel_manager import ExcelManager  # noqa: E402
-from src.historico import RUTA_INDICE  # noqa: E402
-from src.indice import Indice  # noqa: E402
-from src.reporte_excel import generar_reporte  # noqa: E402
+from src.nucleo.rutas import R  # noqa: E402
+from src.nucleo.config import load_config, resolver_cargar_desde  # noqa: E402
+from src.excel.manager import ExcelManager  # noqa: E402
+from src.datos.historico import RUTA_INDICE  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
+from src.excel.reporte import generar_reporte  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--desde", help="AAAA-MM-DD")
 ap.add_argument("--dias", type=int, help="hoy y N días antes")
 ap.add_argument("--grupo", help="fragmento del título del grupo")
 ap.add_argument("--todos", action="store_true", help="todos los grupos indexados")
-ap.add_argument("--salida", help="ruta del .xlsx (por defecto data/Reportes/Reporte_<fecha>.xlsx)")
+ap.add_argument("--salida", help="ruta del .xlsx (por defecto data/Reportes/historial/Reporte_<fecha>.xlsx)")
 args = ap.parse_args()
 
 cfg = load_config()
@@ -53,5 +54,5 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp, Indice(RUTA
         grupos = [g for g in indexados if cfg.whatsapp.grupos[0].lower() in g.lower() or g.lower() in cfg.whatsapp.grupos[0].lower()]
     if not grupos:
         sys.exit("No hay grupos indexados que coincidan. Corre primero scripts/cargar_historico.py")
-    salida = Path(args.salida) if args.salida else Path("data/Reportes") / f"Reporte_{datetime.now():%Y%m%d_%H%M}.xlsx"
+    salida = Path(args.salida) if args.salida else R.reportes_historial / f"Reporte_{datetime.now():%Y%m%d_%H%M}.xlsx"
     print("Reporte:", generar_reporte(cfg, excel, indice, grupos, desde, salida))

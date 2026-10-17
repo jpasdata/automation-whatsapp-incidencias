@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .aprendizaje import pares_desde_indice
-from .config import provincias_de_grupo, ventana_texto_de_grupo
-from .cruce import ResultadoCruce, cruzar
-from .matcher import asociar_mensajes
+from src.cruce.aprendizaje import pares_desde_indice
+from src.nucleo.config import provincias_de_grupo, ventana_texto_de_grupo
+from src.cruce.cruce import ResultadoCruce, cruzar
+from src.cruce.matcher import asociar_mensajes
 
 
 def cruces_de_grupo(cfg, excel, indice, grupo: str, desde: datetime, pares: dict[str, str] | None = None) -> list[ResultadoCruce]:

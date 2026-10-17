@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.estado_descargas import resumen  # noqa: E402
+from src.datos.estado_descargas import resumen  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 print(resumen())

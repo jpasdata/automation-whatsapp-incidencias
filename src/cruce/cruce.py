@@ -11,9 +11,9 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
-from .excel_manager import ExcelManager, FilaIncidencia
-from .modelos import CriterioBusqueda, ResultadoMatch, TipoOrigenMatch
-from .validacion_temporal import ResultadoValidacionTemporal, verificar_ventana_horaria
+from src.excel.manager import ExcelManager, FilaIncidencia
+from src.nucleo.modelos import CriterioBusqueda, ResultadoMatch, TipoOrigenMatch
+from src.cruce.validacion_temporal import ResultadoValidacionTemporal, verificar_ventana_horaria
 
 
 @dataclass

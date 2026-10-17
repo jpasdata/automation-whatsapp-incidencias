@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
-from src.aprendizaje import aprender_pares
-from src.config import ventana_texto_de_grupo
-from src.cruce import cruzar
-from src.excel_manager import FilaIncidencia
-from src.matcher import asociar_mensajes
-from src.modelos import Mensaje, TipoOrigenMatch
+from src.cruce.aprendizaje import aprender_pares
+from src.nucleo.config import ventana_texto_de_grupo
+from src.cruce.cruce import cruzar
+from src.excel.manager import FilaIncidencia
+from src.cruce.matcher import asociar_mensajes
+from src.nucleo.modelos import Mensaje, TipoOrigenMatch
 
 T0 = datetime(2026, 10, 12, 10, 0)
 
@@ -63,7 +63,7 @@ def test_ventana_propia_por_grupo():
 
 
 def test_aviso_escrito_en_el_texto_libre_del_excel():
-    from src.excel_manager import extraer_avisos
+    from src.excel.manager import extraer_avisos
 
     assert extraer_avisos("sector sin luz  aviso  5628218", None) == ("5628218",)
     assert extraer_avisos("F 17739- AVISO 563-0350", "sin luz 5628387") == ("5630350", "5628387")

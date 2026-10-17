@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Abre WhatsApp Web (sesión persistente), espera el login (QR la primera vez),
-lista los nombres de chats/grupos visibles y los guarda en logs/chats_visibles.txt.
+lista los nombres de chats/grupos visibles y los guarda en logs/archivo/chats_visibles.txt.
 Solo lee: no abre chats, no descarga, no envía nada.
 
 Uso:
@@ -16,10 +16,11 @@ sys.path.insert(0, str(RAIZ))
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from src.whatsapp_session import SELECTORES, TIMEOUT_LOGIN_MS, URL_WHATSAPP_WEB  # noqa: E402
+from src.whatsapp.session import SELECTORES, TIMEOUT_LOGIN_MS, URL_WHATSAPP_WEB  # noqa: E402
 
 segundos_abierto = int(sys.argv[1]) if len(sys.argv) > 1 else 600
-salida = RAIZ / "logs" / "chats_visibles.txt"
+salida = RAIZ / "logs" / "archivo" / "chats_visibles.txt"
+salida.parent.mkdir(parents=True, exist_ok=True)
 salida.parent.mkdir(exist_ok=True)
 
 with sync_playwright() as pw:

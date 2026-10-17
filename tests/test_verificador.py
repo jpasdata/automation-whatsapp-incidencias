@@ -1,4 +1,4 @@
-from src.verificador import ERROR, OK, AVISO, Resultado, hay_errores, informe, revisar_candado, revisar_carpetas, revisar_config
+from src.nucleo.verificador import ERROR, OK, AVISO, Resultado, hay_errores, informe, revisar_candado, revisar_carpetas, revisar_config
 
 
 def test_config_inexistente_es_error_con_arreglo(tmp_path):

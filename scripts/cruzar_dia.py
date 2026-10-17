@@ -16,12 +16,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import load_config, provincias_de_grupo  # noqa: E402
-from src.cruce import cruzar, resumen  # noqa: E402
-from src.excel_manager import ExcelManager  # noqa: E402
-from src.historico import RUTA_INDICE  # noqa: E402
-from src.indice import Indice  # noqa: E402
-from src.matcher import asociar_mensajes  # noqa: E402
+from src.nucleo.config import load_config, provincias_de_grupo  # noqa: E402
+from src.cruce.cruce import cruzar, resumen  # noqa: E402
+from src.excel.manager import ExcelManager  # noqa: E402
+from src.datos.historico import RUTA_INDICE  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
+from src.cruce.matcher import asociar_mensajes  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--fecha", required=True, help="Día a revisar, AAAA-MM-DD")

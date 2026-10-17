@@ -12,7 +12,7 @@ import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
 
-from .modelos import Mensaje
+from src.nucleo.modelos import Mensaje
 
 RX_LARGO = re.compile(r"\b0?\d{11,12}\b")                 # COD-INCIDENCIA (12 dígitos)
 RX_AVISO = re.compile(r"\b5\d{2}-?\d{4}\b|\b5\d{6}\b")      # N° de aviso: 7 dígitos que empiezan en 56/57 (a veces con guion)

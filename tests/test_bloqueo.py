@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from src.bloqueo import SesionOcupada, candado_sesion
+from src.nucleo.bloqueo import SesionOcupada, candado_sesion
 
 
 def test_candado_se_crea_y_se_limpia(tmp_path):

@@ -22,7 +22,7 @@ import logging
 
 from playwright.sync_api import Page
 
-from .whatsapp_session import SELECTORES
+from src.whatsapp.session import SELECTORES
 
 logger = logging.getLogger("incidencias_wa")
 

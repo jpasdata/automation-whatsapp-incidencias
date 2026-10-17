@@ -1,10 +1,10 @@
 from datetime import datetime
 from pathlib import Path
 
-from src.cruce import ResultadoCruce
-from src.descargas import _slug, plan_descargas
-from src.excel_manager import FilaIncidencia
-from src.modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
+from src.cruce.cruce import ResultadoCruce
+from src.bot.descargas import _slug, plan_descargas
+from src.excel.manager import FilaIncidencia
+from src.nucleo.modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
 
 
 def _cruce(id_msg, n_adj, con_fila=True):
@@ -22,8 +22,8 @@ def test_slug_quita_tildes_y_simbolos():
 def test_plan_organiza_por_dia_e_incidencia(tmp_path):
     plan = plan_descargas([_cruce("true_x_ABC12345", 2)], tmp_path, "Veraguas", set())
     t = plan["true_x_ABC12345"]
-    assert t.carpeta == tmp_path / "Veraguas" / "2026-10-09" / "Inc-2345678_f231"
-    assert t.base.startswith("1405_Inc-2345678_f231_") and t.n_esperadas == 2
+    assert t.carpeta == tmp_path / "Veraguas" / "2026-10-09" / "Inc-2345678"
+    assert t.base.startswith("1405_Inc-2345678_") and t.n_esperadas == 2
 
 
 def test_plan_omite_sin_fila_sin_adjunto_y_ya_descargadas(tmp_path):

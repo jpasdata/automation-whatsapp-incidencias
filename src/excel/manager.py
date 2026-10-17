@@ -31,7 +31,7 @@ import logging
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
-from .modelos import CriterioBusqueda, normalizar_texto
+from src.nucleo.modelos import CriterioBusqueda, normalizar_texto
 
 
 class ExcelManagerError(Exception):

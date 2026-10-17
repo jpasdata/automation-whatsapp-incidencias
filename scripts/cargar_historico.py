@@ -20,13 +20,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import eventos  # noqa: E402
-from src.config import load_config, provincias_de_grupo, resolver_cargar_desde  # noqa: E402
-from src.excel_vivo import ExcelEnVivo  # noqa: E402
-from src.historico import RUTA_INDICE, cargar_historico, verificar_historico  # noqa: E402
-from src.indice import Indice  # noqa: E402
-from src.logger import setup_logger  # noqa: E402
-from src.verificador import hay_errores, informe, verificar  # noqa: E402
+from src.nucleo import eventos  # noqa: E402
+from src.nucleo.rutas import R  # noqa: E402
+from src.nucleo.config import load_config, provincias_de_grupo, resolver_cargar_desde  # noqa: E402
+from src.excel.en_vivo import ExcelEnVivo  # noqa: E402
+from src.datos.historico import RUTA_INDICE, cargar_historico, verificar_historico  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
+from src.nucleo.logger import setup_logger  # noqa: E402
+from src.nucleo.verificador import hay_errores, informe, verificar  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--grupo", help="Fragmento del título del grupo (por defecto, el primero de config.yaml)")
@@ -50,7 +51,6 @@ if sys.platform == "win32":  # que el PC no se duerma durante la corrida (no cam
 
 cfg = load_config()
 logger = setup_logger(cfg.logging.carpeta_logs, cfg.logging.nivel)
-eventos.configurar(cfg.logging.carpeta_logs)
 
 # --- rango de tiempo ---------------------------------------------------------------------------------
 if args.desde:
@@ -77,10 +77,12 @@ eventos.evento("-", "corrida", "inicio", "ok", f"grupos={grupos} desde={desde.da
 
 excel = None
 if args.descargar:
-    from src.excel_manager import ExcelManager
+    from src.excel.incidencias import carpeta_de, incorporar_nuevas
+    from src.excel.manager import ExcelManager
 
     tmp = tempfile.mkdtemp()
     copia = Path(tmp) / "copia.xlsx"
+    incorporar_nuevas(carpeta_de(cfg))  # lo que se haya dejado en data/Incidencias/nuevas/ entra a la base antes de leerla
     shutil.copy(cfg.excel.ruta_archivo, copia)  # el original no se toca
     e = cfg.excel
     excel = ExcelManager.desde_config(str(copia), e)
@@ -94,7 +96,7 @@ for n, grupo in enumerate(grupos, 1):
     t0 = time.time()
     fabrica = None
     if excel is not None:
-        from src.descargas import Descargador
+        from src.bot.descargas import Descargador
 
         provincias = provincias_de_grupo(cfg, grupo)
         logger.info("Provincias del Excel para este grupo: %s", sorted(provincias) if provincias else "(sin filtro: cruza contra todo)")
@@ -115,10 +117,10 @@ eventos.evento("-", "corrida", "fin", "ok", "; ".join(f"{g}={e}" for g, e, _ in 
 
 if excel is not None:  # reporte Excel con formato (resumen, por incidencia, por día, descargas, sin cruce)
     try:
-        from src.reporte_excel import generar_reporte
+        from src.excel.reporte import generar_reporte
 
         with Indice(RUTA_INDICE) as indice:
-            salida = Path("data/Reportes") / f"Reporte_{datetime.now():%Y%m%d_%H%M}.xlsx"
+            salida = R.reportes_historial / f"Reporte_{datetime.now():%Y%m%d_%H%M}.xlsx"
             generar_reporte(cfg, excel, indice, grupos, desde, salida)
         logger.info("REPORTE EXCEL generado: %s", salida.resolve())
     except Exception:  # noqa: BLE001
@@ -128,4 +130,4 @@ with Indice(RUTA_INDICE) as indice:
     for grupo in grupos:
         print()
         print(verificar_historico(indice, grupo, desde))
-print("\nDetalle completo en logs/detalle.log; descargas en logs/descargas_detalle.csv; resumen: python scripts/estado_descargas.py")
+print(f"\nLogs de esta corrida: {eventos.CARPETA} (detalle_001.log, descargas_detalle.csv). Resumen: python scripts/estado_descargas.py")

@@ -15,7 +15,9 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parent.parent
+from .rutas import R, Rutas
+
+RAIZ = R.raiz
 OK, AVISO, ERROR = "OK", "AVISO", "ERROR"
 
 
@@ -100,9 +102,9 @@ def revisar_disco(raiz: Path = RAIZ, minimo_gb: float = 2.0) -> Resultado:
 
 def revisar_carpetas(raiz: Path = RAIZ) -> Resultado:
     malas = []
-    for rel in ("data", "data/indice", "data/Evidencias_WhatsApp", "logs"):
+    for d in Rutas(raiz).carpetas_de_trabajo():
+        rel = str(d.relative_to(raiz)).replace("\\", "/")
         try:
-            d = raiz / rel
             d.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(dir=d):
                 pass
@@ -115,7 +117,7 @@ def revisar_carpetas(raiz: Path = RAIZ) -> Resultado:
 
 
 def revisar_candado(raiz: Path = RAIZ) -> Resultado:
-    from .bloqueo import _vivo
+    from src.nucleo.bloqueo import _vivo
 
     lock = raiz / "sesion_whatsapp.lock"
     if lock.exists():
@@ -131,7 +133,7 @@ def revisar_candado(raiz: Path = RAIZ) -> Resultado:
 
 def revisar_config(raiz: Path = RAIZ):
     """Devuelve (lista de resultados, cfg o None)."""
-    from .config import ConfigError, load_config, resolver_cargar_desde
+    from src.nucleo.config import ConfigError, load_config, resolver_cargar_desde
 
     ruta = raiz / "config" / "config.yaml"
     if not ruta.exists():
@@ -155,8 +157,8 @@ def revisar_config(raiz: Path = RAIZ):
 
 
 def revisar_excel(cfg, raiz: Path = RAIZ) -> list[Resultado]:
-    from .config import provincias_de_grupo
-    from .excel_manager import ExcelManager
+    from src.nucleo.config import provincias_de_grupo
+    from src.excel.manager import ExcelManager
 
     ruta = Path(cfg.excel.ruta_archivo)
     if not ruta.is_absolute():

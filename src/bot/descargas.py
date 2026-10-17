@@ -24,17 +24,18 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
-from . import eventos
-from .cruce import ResultadoCruce, cruzar
-from .excel_manager import ExcelManager
-from .indice import Indice
-from .matcher import asociar_mensajes
-from .busqueda import cruces_de_grupo
-from .whatsapp_reader import _JS_IR_ARRIBA, descargar_adjunto
+from src.nucleo import eventos
+from src.nucleo.rutas import R
+from src.cruce.cruce import ResultadoCruce, cruzar
+from src.excel.manager import ExcelManager
+from src.datos.indice import Indice
+from src.cruce.matcher import asociar_mensajes
+from src.cruce.busqueda import cruces_de_grupo
+from src.whatsapp.reader import _JS_IR_ARRIBA, descargar_adjunto
 
 logger = logging.getLogger("incidencias_wa")
 
-RAIZ_EVIDENCIAS = Path(__file__).resolve().parent.parent / "data" / "Evidencias_WhatsApp"
+RAIZ_EVIDENCIAS = R.evidencias
 MAX_RUTA = 235  # Windows falla con rutas de ~260 caracteres o más: se deja margen
 
 
@@ -69,7 +70,7 @@ _RX_ELEM = re.compile(r"^F[\s:\-#]?\d{3,6}$", re.I)
 def etiqueta_identificador(c: ResultadoCruce) -> str:
     """
     Texto que identifica de dónde es una foto, para la carpeta y el nombre del archivo:
-      con incidencia del Excel -> "Inc-1168222_Aviso-5620125_f230"   (f = fila del Excel)
+      con incidencia del Excel -> "Inc-1168222_Aviso-5620125"   (sin número de fila: la fila cambia al ordenar la base)
       número del chat, no está en el Excel -> "Aviso-5633273" / "Inc-1170118" / "Elem-F02210"
       sin número -> "" (va a _sin_numero)
     """
@@ -78,7 +79,6 @@ def etiqueta_identificador(c: ResultadoCruce) -> str:
         partes = [f"Inc-{f.codigo_corto or (f.codigo_largo or '')[1:8]}"]
         if f.numero_aviso:
             partes.append(f"Aviso-{f.numero_aviso}")
-        partes.append(f"f{f.fila_excel}" + (f"-{_slug(f.hoja, 10)}" if f.hoja else ""))
         return "_".join(_slug(x, 30) for x in partes)
     partes = []
     for cand in c.match.candidatos:
@@ -107,7 +107,7 @@ def plan_descargas(
     """
     Qué bajar: los paquetes con adjunto aún no descargados que cruzan con una fila del Excel (lo normal, para
     no exceder el ritmo de descargas) o todos (`todo=True`). Organización:
-        <Grupo>/<día>/<Inc-..._Aviso-..._fNN>/                    cruza con el Excel
+        <Grupo>/<día>/<Inc-..._Aviso-...>/                        cruza con el Excel
         <Grupo>/<día>/<sin_cruce_dir>/<Aviso-.../Inc-...>/        el chat trae número pero no está en el Excel
         <Grupo>/<día>/_sin_numero/                                 el chat no trae ningún número (aún)
     y cada archivo se llama <HHMM>_<identificador>_<remitente>_<id>_<n>.<ext>.

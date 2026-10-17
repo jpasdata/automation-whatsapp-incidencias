@@ -18,11 +18,11 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from .config import load_config, resolver_cargar_desde
-from .logger import setup_logger
-from .matcher import asociar_mensajes
-from .whatsapp_reader import leer_mensajes_recientes, listar_participantes
-from .whatsapp_session import SesionWhatsApp
+from src.nucleo.config import load_config, resolver_cargar_desde
+from src.nucleo.logger import setup_logger
+from src.cruce.matcher import asociar_mensajes
+from src.whatsapp.reader import leer_mensajes_recientes, listar_participantes
+from src.whatsapp.session import SesionWhatsApp
 
 
 def ejecutar_exploracion(incluir_participantes: bool = False) -> dict:
@@ -95,7 +95,8 @@ def ejecutar_exploracion(incluir_participantes: bool = False) -> dict:
 
 
 def _guardar_reporte(reporte: dict, carpeta_logs: str, logger: logging.Logger) -> Path:
-    carpeta = Path(carpeta_logs)
+    carpeta = Path(carpeta_logs) / "archivo" / "exploracion"
+    carpeta.mkdir(parents=True, exist_ok=True)
     carpeta.mkdir(parents=True, exist_ok=True)
     nombre = f"reporte_exploracion_{datetime.now():%Y%m%d_%H%M%S}.json"
     ruta = carpeta / nombre

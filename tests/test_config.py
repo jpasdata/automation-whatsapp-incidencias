@@ -1,6 +1,6 @@
 import pytest
 
-from src.config import ConfigError, load_config
+from src.nucleo.config import ConfigError, load_config
 
 
 def test_load_config_falla_claro_si_no_existe_el_archivo(tmp_path):
@@ -79,7 +79,7 @@ def test_load_config_sin_grupos_falla(tmp_path):
 
 def test_resolver_cargar_desde():
     from datetime import datetime
-    from src.config import resolver_cargar_desde
+    from src.nucleo.config import resolver_cargar_desde
     hoy = datetime(2026, 10, 15, 22, 0)
     assert resolver_cargar_desde("mes_actual", hoy) == datetime(2026, 10, 1)
     assert resolver_cargar_desde("2026-09-20", hoy) == datetime(2026, 9, 20)

@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from src.whatsapp_reader import (
+from src.whatsapp.reader import (
     construir_mensajes,
     leer_mensajes_recientes,
     parsear_hora,
@@ -112,7 +112,7 @@ HTML_MODAL = """
 
 
 def test_cerrar_avisos_pulsa_continuar(pagina):
-    from src.whatsapp_session import SesionWhatsApp
+    from src.whatsapp.session import SesionWhatsApp
     pagina.set_content(HTML_MODAL)
     sesion = SesionWhatsApp("x")
     sesion.pagina = pagina
@@ -121,7 +121,7 @@ def test_cerrar_avisos_pulsa_continuar(pagina):
 
 
 def test_cerrar_avisos_sin_modal_no_hace_nada(pagina):
-    from src.whatsapp_session import SesionWhatsApp
+    from src.whatsapp.session import SesionWhatsApp
     sesion = SesionWhatsApp("x")
     sesion.pagina = pagina
     assert sesion.cerrar_avisos() == 0
@@ -146,7 +146,7 @@ HTML_CITA = """
 
 
 def test_respuesta_con_cita_se_lee_bien_y_se_asocia(pagina):
-    from src.matcher import asociar_mensajes
+    from src.cruce.matcher import asociar_mensajes
     pagina.set_content(HTML_CITA)
     ms = leer_mensajes_recientes(pagina, intentos_tope=0)
     assert len(ms) == 2
@@ -166,7 +166,7 @@ HTML_DIALOGO_DESCONOCIDO = """
 
 
 def test_cerrar_avisos_no_pulsa_escape_con_dialogo_desconocido(pagina):
-    from src.whatsapp_session import SesionWhatsApp
+    from src.whatsapp.session import SesionWhatsApp
     pagina.set_content(HTML_DIALOGO_DESCONOCIDO)
     pagina.evaluate("window.__escape = false; document.addEventListener('keydown', e => { if (e.key === 'Escape') window.__escape = true; })")
     sesion = SesionWhatsApp("x")
@@ -195,7 +195,7 @@ def test_leer_con_desde_inalcanzable_avisa_historico_incompleto(pagina, caplog):
     ("Mensaje normal", None),
 ])
 def test_estado_sincronizacion(pagina, texto, esperado):
-    from src.whatsapp_reader import estado_sincronizacion
+    from src.whatsapp.reader import estado_sincronizacion
     pagina.set_content(f"<html><body><div>{texto}</div></body></html>")
     assert estado_sincronizacion(pagina) == esperado
 
@@ -207,7 +207,7 @@ def test_en_el_tope_pide_mas_antes_de_rendirse(pagina, caplog):
 
 
 def test_fusionar_orden_solapado_y_en_cualquier_direccion():
-    from src.whatsapp_reader import fusionar_orden
+    from src.whatsapp.reader import fusionar_orden
     o = fusionar_orden([], ["c", "d", "e"])
     assert o == ["c", "d", "e"]
     o = fusionar_orden(o, ["a", "b", "c", "d"])      # al subir: lo nuevo va antes
@@ -229,14 +229,14 @@ HTML_SCROLL = """
 
 
 def test_cosechar_recorre_de_arriba_a_abajo_sin_repetir(pagina):
-    from src.whatsapp_reader import cosechar
+    from src.whatsapp.reader import cosechar
     pagina.set_content(HTML_SCROLL.replace('<div role="row"><div data-testid="conv-msg-M0"', '<div role="row"><div>Ayer</div></div><div role="row"><div data-testid="conv-msg-M0"', 1))
     ms = cosechar(pagina, espera_paso_ms=30)
     assert [m.id_mensaje for m in ms] == [f"M{i}" for i in range(40)]
 
 
 def test_cosechar_se_detiene_en_lo_ya_conocido(pagina):
-    from src.whatsapp_reader import cosechar
+    from src.whatsapp.reader import cosechar
     pagina.set_content(HTML_SCROLL)
     conocidos = {f"M{i}" for i in range(40)}
     cosechar(pagina, espera_paso_ms=30, ids_conocidos=conocidos)
@@ -246,14 +246,14 @@ def test_cosechar_se_detiene_en_lo_ya_conocido(pagina):
 
 
 def test_cargar_hacia_arriba_termina_cuando_no_llegan_tandas(pagina):
-    from src.whatsapp_reader import cargar_hacia_arriba
+    from src.whatsapp.reader import cargar_hacia_arriba
     pagina.set_content(HTML_SCROLL)
     r = cargar_hacia_arriba(pagina, max_seg=40, ciclos_por_intento=1, intentos_sin_tanda=1, espera_circulo_seg=1, rueda_real=False)
     assert r["tandas"] == 0 and r["llego_desde"] is False
 
 
 def test_cosechar_descarta_el_arranque_sin_fecha(pagina):
-    from src.whatsapp_reader import cosechar
+    from src.whatsapp.reader import cosechar
     html = ('<html><body><div data-testid="conversation-panel-messages" style="height:300px;overflow-y:auto">'
             + "".join(f'<div role="row"><div data-testid="conv-msg-S{i}" data-id="S{i}"><div data-virtualized="false">'
                       f'<span data-testid="author">Juan</span><span class="selectable-text">sin fecha {i}</span>'

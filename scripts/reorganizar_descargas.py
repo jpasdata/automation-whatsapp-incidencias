@@ -17,16 +17,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import eventos  # noqa: E402
-from src.config import load_config, provincias_de_grupo  # noqa: E402
-from src.cruce import cruzar  # noqa: E402
-from src.descargas import RAIZ_EVIDENCIAS, plan_descargas  # noqa: E402
-from src.excel_manager import ExcelManager  # noqa: E402
-from src.historico import RUTA_INDICE  # noqa: E402
-from src.indice import Indice  # noqa: E402
-from src.logger import setup_logger  # noqa: E402
-from src.matcher import asociar_mensajes  # noqa: E402
-from src.vigilante import carpeta_sin_cruce, escribir_manifiestos, reubicar_identificadas  # noqa: E402
+from src.nucleo import eventos  # noqa: E402
+from src.nucleo.config import load_config, provincias_de_grupo  # noqa: E402
+from src.cruce.cruce import cruzar  # noqa: E402
+from src.bot.descargas import RAIZ_EVIDENCIAS, plan_descargas  # noqa: E402
+from src.excel.manager import ExcelManager  # noqa: E402
+from src.datos.historico import RUTA_INDICE  # noqa: E402
+from src.datos.indice import Indice  # noqa: E402
+from src.nucleo.logger import setup_logger  # noqa: E402
+from src.cruce.matcher import asociar_mensajes  # noqa: E402
+from src.bot.vigilante import carpeta_sin_cruce, escribir_manifiestos, reubicar_identificadas  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--desde", default="2026-10-01", help="AAAA-MM-DD (default 2026-10-01)")
@@ -35,7 +35,6 @@ args = ap.parse_args()
 
 cfg = load_config()
 logger = setup_logger(cfg.logging.carpeta_logs, cfg.logging.nivel)
-eventos.configurar(cfg.logging.carpeta_logs)
 desde = datetime.fromisoformat(args.desde)
 copia = Path(tempfile.mkdtemp()) / "copia.xlsx"
 shutil.copy(cfg.excel.ruta_archivo, copia)
