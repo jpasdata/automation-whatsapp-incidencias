@@ -17,3 +17,5 @@ data/indice/
 # logs: capturas de WhatsApp, reportes y cruces con datos reales
 logs/*
 !logs/.gitkeep
+
+data/Reportes/

@@ -100,6 +100,8 @@ def cargar_historico(
         ronda = 0
         try:
             _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descargador, reintento_seg)
+            if descargador is not None:
+                descargador.barrido_final(sesion.pagina)
         finally:
             if descargador is not None:
                 n = descargador.escribir_pendientes(Path(cfg.logging.carpeta_logs) / "descargas_pendientes.csv")
@@ -127,6 +129,7 @@ def _rondas(cfg, grupo, desde, limite, minutos, logger, indice, sesion, descarga
 
             stats = cargar_hacia_arriba(
                 sesion.pagina, desde=desde, max_seg=restante, al_tanda=guardar_tanda,
+                al_ciclo=(lambda: descargador.en_ciclo(sesion.pagina)) if descargador is not None else None,
                 al_progreso=lambda i: logger.info(
                     "  tandas: %d | burbujas: %d | ciclos: %d | intentos sin tanda: %d | %ds", i["tandas"], i["burbujas"], i["ciclos"], i["sin_tanda"], i["segundos"]),
             )

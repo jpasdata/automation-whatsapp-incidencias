@@ -355,6 +355,7 @@ def cargar_hacia_arriba(
     rueda_real: bool = True,
     al_progreso: Callable[[dict], None] | None = None,
     al_tanda: Callable[[], None] | None = None,
+    al_ciclo: Callable[[], None] | None = None,
 ) -> dict:
     """
     FASE 1 (sin leer). Hace lo que una persona (grabación real + prueba a mano): el círculo de carga solo
@@ -406,20 +407,33 @@ def cargar_hacia_arriba(
                 ciclo_bajar_y_subir(presion)
                 ciclos += 1
                 _subir_rapido_al_tope(pagina)  # por si la rueda no alcanzó el tope exacto
+                if al_ciclo:  # lo pintado cambia a cada ciclo: es el momento de bajar adjuntos pendientes a la vista
+                    try:
+                        al_ciclo()
+                    except Exception as e:  # noqa: BLE001
+                        if "closed" in str(e).lower():
+                            raise
+                        logger.warning("Fallo en la acción por ciclo: %s", e)
                 # ¿giró el círculo o ya hay burbujas nuevas? esperar solo mientras gira
+                t_ciclo = time.time()
                 limite = time.time() + 1.5
                 while time.time() < limite and conteo() <= antes and not pagina.evaluate(_JS_HAY_CIRCULO):
                     pagina.wait_for_timeout(250)
-                if pagina.evaluate(_JS_HAY_CIRCULO) and conteo() <= antes:
+                vio_circulo = bool(pagina.evaluate(_JS_HAY_CIRCULO))
+                if vio_circulo and conteo() <= antes:
                     limite = time.time() + espera_circulo_seg
                     while time.time() < limite and conteo() <= antes:
                         pagina.wait_for_timeout(250)
-                if conteo() > antes:
+                ahora_n = conteo()
+                logger.debug("Ciclo %d: círculo de carga=%s, burbujas %d -> %d, espera %.1fs, %ds desde el inicio",
+                             ciclos, "SÍ" if vio_circulo else "no", antes, ahora_n, time.time() - t_ciclo, time.time() - t0)
+                if ahora_n > antes:
                     llegó = True
                     break
             if llegó:
                 tandas += 1
                 sin_tanda = 0
+                logger.info("TANDA %d: llegaron mensajes nuevos arriba (ciclo %d, %ds de subida).", tandas, ciclos, time.time() - t0)
                 if al_tanda:  # Web solo conserva ~100 mensajes pintados: guardar cada tanda al llegar
                     try:
                         al_tanda()
@@ -435,6 +449,8 @@ def cargar_hacia_arriba(
                         break
             else:
                 sin_tanda += 1
+                logger.info("Intento %d/%d sin tanda nueva tras %d ciclos (si el celular no entrega más, se da por terminado).",
+                            sin_tanda, intentos_sin_tanda, ciclos_por_intento)
             if al_progreso:
                 al_progreso({"tandas": tandas, "burbujas": conteo(), "sin_tanda": sin_tanda, "ciclos": ciclos,
                              "segundos": round(time.time() - t0)})
@@ -763,6 +779,7 @@ def _bajar_elemento_actual(pagina: Page, carpeta: Path, base: str) -> Path | Non
 
 def descargar_adjunto(
     pagina: Page, miniatura: Locator, carpeta_destino: Path, nombre_base: str, todo_el_album: bool = False, max_album: int = 60,
+    errores: list[str] | None = None,
 ) -> list[Path]:
     """
     Descarga el adjunto de una miniatura abriendo el visor de WhatsApp Web (foto verificada en vivo: 864x1152
@@ -779,10 +796,14 @@ def descargar_adjunto(
         miniatura.click(timeout=8_000)
         pagina.wait_for_timeout(700)
         cabecera = pagina.evaluate(_JS_CABECERA_VISOR)
+        logger.debug("  visor abierto para '%s' (álbum=%s, encabezado=%r)", nombre_base, todo_el_album, cabecera)
         vistos: set[int] = set()
         for n in range(1, (max_album if todo_el_album else 1) + 1):
             ruta = _bajar_elemento_actual(pagina, carpeta_destino, f"{nombre_base}_{n}" if todo_el_album else nombre_base)
+            if ruta is None and errores is not None:
+                errores.append(f"elemento {n}: el visor no terminó de cargar el original en 20 s")
             if ruta is not None:
+                logger.debug("    guardado %s (%d bytes)", ruta.name, ruta.stat().st_size)
                 firma = hash(ruta.read_bytes()[:4096]) ^ ruta.stat().st_size
                 if firma in vistos:  # el visor no avanzó: mismo archivo otra vez
                     ruta.unlink()
@@ -802,7 +823,9 @@ def descargar_adjunto(
     except Exception as e:  # noqa: BLE001
         if "closed" in str(e).lower():
             raise
-        logger.error("No se pudo descargar el adjunto '%s': %s", nombre_base, e)
+        logger.error("No se pudo descargar el adjunto '%s': %s", nombre_base, e, exc_info=True)
+        if errores is not None:
+            errores.append(f"{type(e).__name__}: {str(e)[:160]}")
     finally:
         try:
             pagina.locator(_BOTON_CERRAR).first.click(timeout=3_000)
