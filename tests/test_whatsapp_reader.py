@@ -266,3 +266,28 @@ def test_cosechar_descarta_el_arranque_sin_fecha(pagina):
     pagina.set_content(html)
     ids = [m.id_mensaje for m in cosechar(pagina, espera_paso_ms=30)]
     assert ids == ["T0", "T1", "T2"]  # los S* quedan fuera: no se sabe de qué día son
+
+
+def test_cargar_hacia_arriba_espera_si_whatsapp_esta_sincronizando(monkeypatch):
+    from src.whatsapp import reader, rueda
+
+    class Pagina:
+        esperado = 0
+
+        def evaluate(self, js, *a):
+            return 50 if js == reader._JS_CONTAR_BURBUJAS else False
+
+        def wait_for_timeout(self, ms):
+            if ms == 30_000:
+                Pagina.esperado += 1
+
+    estados = iter(["sincronizando", "sincronizando", None, None, None])
+    monkeypatch.setattr(reader, "estado_sincronizacion", lambda p: next(estados, None))
+    monkeypatch.setattr(reader, "_calentar", lambda p: None)
+    monkeypatch.setattr(reader, "_subir_rapido_al_tope", lambda p: None)
+    monkeypatch.setattr(reader, "leer_instantanea", lambda p: [])
+    monkeypatch.setattr(rueda, "PresionContinua", lambda *a, **k: None)
+    monkeypatch.setattr(rueda, "ciclo_bajar_y_subir", lambda p: None)
+    r = reader.cargar_hacia_arriba(Pagina(), max_seg=60, ciclos_por_intento=1, intentos_sin_tanda=3, espera_sync_seg=900)
+    assert Pagina.esperado == 2                  # esperó las dos veces que WhatsApp dijo «sincronizando»
+    assert r["tandas"] == 0 and r["llego_desde"] is False

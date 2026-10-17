@@ -356,6 +356,7 @@ def cargar_hacia_arriba(
     al_progreso: Callable[[dict], None] | None = None,
     al_tanda: Callable[[], None] | None = None,
     al_ciclo: Callable[[], None] | None = None,
+    espera_sync_seg: float = 900,
 ) -> dict:
     """
     FASE 1 (sin leer). Hace lo que una persona (grabación real + prueba a mano): el círculo de carga solo
@@ -367,6 +368,9 @@ def cargar_hacia_arriba(
       - si no pasa nada, se repite el ciclo de inmediato (sin esperas de 25 s).
     Un "intento" son `ciclos_por_intento` ciclos sin tanda; tras `intentos_sin_tanda` intentos
     seguidos sin tanda se da por terminado. Para al llegar a `desde` o al agotar `max_seg`.
+    Si WhatsApp muestra "sincronizando mensajes más antiguos" (un PC vinculado hace poco recibe el histórico del celular poco a poco),
+    no se da por terminado: se espera hasta `espera_sync_seg` en total a que lleguen más. Si dice "pausada", se avisa que hay que abrir
+    WhatsApp en el celular, conectado a internet.
     Devuelve {"llego_desde", "burbujas", "segundos", "tandas", "ciclos"}.
     """
     from src.whatsapp.rueda import PresionContinua, ciclo_bajar_y_subir
@@ -375,6 +379,8 @@ def cargar_hacia_arriba(
     ahora = datetime.now()
     tandas = ciclos = sin_tanda = 0
     llego = False
+    esperado_sync = 0.0
+    avisada_pausa = False
     presion = PresionContinua(pagina, rueda_real)
     _calentar(presion)
 
@@ -451,6 +457,15 @@ def cargar_hacia_arriba(
                 sin_tanda += 1
                 logger.info("Intento %d/%d sin tanda nueva tras %d ciclos (si el celular no entrega más, se da por terminado).",
                             sin_tanda, intentos_sin_tanda, ciclos_por_intento)
+                sync = estado_sincronizacion(pagina)
+                if sync == "sincronizando" and esperado_sync < espera_sync_seg:
+                    sin_tanda -= 1                      # el celular sigue enviando el histórico: no es el final, se espera
+                    pagina.wait_for_timeout(30_000)
+                    esperado_sync += 30
+                    logger.info("WhatsApp está sincronizando mensajes más antiguos desde el celular: se espera (%d/%d s).", esperado_sync, espera_sync_seg)
+                elif sync == "pausada" and not avisada_pausa:
+                    avisada_pausa = True
+                    logger.warning("WhatsApp tiene PAUSADA la sincronización del histórico: abre WhatsApp en el celular (con internet) para que siga.")
             if al_progreso:
                 al_progreso({"tandas": tandas, "burbujas": conteo(), "sin_tanda": sin_tanda, "ciclos": ciclos,
                              "segundos": round(time.time() - t0)})
