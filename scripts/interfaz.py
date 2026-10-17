@@ -36,6 +36,7 @@ MODOS = {
     "Subir + cruzar + descargar TODO (cruce o no)": ("scripts/cargar_historico.py", ["--descargar", "--todo"]),
     "Solo subir e indexar (sin descargar)": ("scripts/cargar_historico.py", []),
     "Solo actualizar lo nuevo (rápido, todos los grupos)": ("scripts/actualizar.py", []),
+    "VIGILANTE: bajar todo lo que llega, todo el día": ("scripts/vigilante.py", []),
 }
 
 
@@ -140,6 +141,8 @@ class Interfaz:
     def armar_comando(self) -> list[str]:
         script, fijas = MODOS[self.modo.get()]
         orden = [sys.executable, "-u", script, *fijas]
+        if "vigilante" in script:
+            orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
         if "cargar_historico" in script:
             orden += ["--todos"] if self.grupo.get() == TODOS else ["--grupo", self.grupo.get()]
             orden += ["--minutos", self.minutos.get()]
@@ -193,6 +196,11 @@ class Interfaz:
             self.v["fase"].set(f"Descargando (pasada {m[1]}/{m[2]})")
         if "Bajando " in linea or "-> ok" in linea or "-> error" in linea or "-> parcial" in linea or "Barrido" in linea or "DESCARGA" in linea:
             self.v["fotos"].set(linea.split("|")[-1].strip()[:150])
+        if "VUELTA:" in linea:
+            self.v["fotos"].set(linea.split("VUELTA:")[-1].strip()[:150])
+            self.v["fase"].set("Vigilante: " + linea.split("]")[0].split("|")[-1].strip()[:40])
+        if "IDENTIFICADA DESPUÉS" in linea:
+            self.v["cruce"].set(linea.split("IDENTIFICADA DESPUÉS:")[-1].strip()[:160])
         if "Histórico completo" in linea:
             self.v["fase"].set("Histórico completo: pasando a descargar")
 

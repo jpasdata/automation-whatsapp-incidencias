@@ -38,7 +38,7 @@ elif args.dias is not None:
 else:
     desde = resolver_cargar_desde(cfg.whatsapp.cargar_desde) or datetime.now().replace(day=1, hour=0, minute=0)
 
-with tempfile.TemporaryDirectory() as tmp, Indice(RUTA_INDICE) as indice:
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp, Indice(RUTA_INDICE) as indice:
     copia = Path(tmp) / "copia.xlsx"
     shutil.copy(cfg.excel.ruta_archivo, copia)
     e = cfg.excel

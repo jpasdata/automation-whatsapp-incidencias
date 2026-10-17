@@ -165,7 +165,7 @@ def revisar_excel(cfg, raiz: Path = RAIZ) -> list[Resultado]:
         return [_r(ERROR, "Excel de incidencias", f"no existe {ruta}",
                    "Copia el Excel a esa ruta o corrige excel.ruta_archivo en config.yaml (debe estar cerrado en Excel).")]
     try:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             copia = Path(tmp) / "copia.xlsx"
             shutil.copy(ruta, copia)  # se revisa una copia: el original no se toca
             e = cfg.excel

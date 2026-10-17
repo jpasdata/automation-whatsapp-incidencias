@@ -53,6 +53,7 @@ class TareaDescarga:
 
 def plan_descargas(
     cruces: list[ResultadoCruce], raiz: Path, grupo: str, ya_hechas: set[str], todo: bool = False,
+    sin_cruce_dir="_sin_incidencia",
 ) -> dict[str, TareaDescarga]:
     """
     Qué bajar: los paquetes con adjunto aún no descargados que cruzan con una fila del Excel (lo normal, para
@@ -67,7 +68,7 @@ def plan_descargas(
             codigo = c.fila.codigo_largo or c.fila.codigo_corto or c.fila.numero_aviso or "sin-codigo"
             sub = f"{c.fila.fila_excel}_{_slug(codigo, 30)}"
         else:
-            codigo, sub = "", "_sin_incidencia"
+            codigo, sub = "", (sin_cruce_dir(c) if callable(sin_cruce_dir) else sin_cruce_dir)
         carpeta = raiz / _slug(grupo, 40) / f"{m.timestamp:%Y-%m-%d}" / sub
         base = f"{m.timestamp:%H%M}_{_slug(m.remitente, 14)}_{_slug(m.id_mensaje[-8:], 8)}"
         meta = {

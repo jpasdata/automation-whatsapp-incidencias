@@ -746,6 +746,7 @@ _JS_CABECERA_VISOR = r"""() => {
 }"""
 
 _BOTON_SIGUIENTE = 'button[aria-label="Siguiente"], button[aria-label="Next"]'
+_BOTON_ANTERIOR = 'button[aria-label="Anterior"], button[aria-label="Previous"]'
 _BOTON_DESCARGAR = 'button[aria-label="Descargar"], button[aria-label="Download"]'
 _BOTON_CERRAR = 'button[aria-label="Cerrar"], button[aria-label="Close"]'
 
@@ -797,6 +798,21 @@ def descargar_adjunto(
         pagina.wait_for_timeout(700)
         cabecera = pagina.evaluate(_JS_CABECERA_VISOR)
         logger.debug("  visor abierto para '%s' (álbum=%s, encabezado=%r)", nombre_base, todo_el_album, cabecera)
+        if todo_el_album:
+            # El visor puede abrir en cualquier foto del álbum: se retrocede hasta el inicio (cambia el encabezado
+            # al llegar al mensaje anterior) y se avanza uno, para no dejar fotos atrás.
+            for retro in range(max_album):
+                ant = pagina.locator(_BOTON_ANTERIOR).first
+                if ant.count() == 0 or not ant.is_enabled() or ant.get_attribute("aria-disabled") == "true":
+                    break
+                ant.click(timeout=4_000)
+                pagina.wait_for_timeout(600)
+                if pagina.evaluate(_JS_CABECERA_VISOR) != cabecera:
+                    pagina.locator(_BOTON_SIGUIENTE).first.click(timeout=4_000)
+                    pagina.wait_for_timeout(600)
+                    retro -= 1
+                    break
+            logger.debug("  retrocedió %d foto(s) hasta el inicio del álbum", retro + 1)
         vistos: set[int] = set()
         for n in range(1, (max_album if todo_el_album else 1) + 1):
             ruta = _bajar_elemento_actual(pagina, carpeta_destino, f"{nombre_base}_{n}" if todo_el_album else nombre_base)
@@ -814,11 +830,14 @@ def descargar_adjunto(
                 break
             sig = pagina.locator(_BOTON_SIGUIENTE).first
             if sig.count() == 0 or not sig.is_enabled() or sig.get_attribute("aria-disabled") == "true":
+                logger.debug("  fin del álbum tras %d elemento(s): no hay botón Siguiente activo", n)
                 break
             pagina.wait_for_timeout(random.randint(500, 1400))
             sig.click(timeout=4_000)
             pagina.wait_for_timeout(700)
-            if pagina.evaluate(_JS_CABECERA_VISOR) != cabecera:  # ya es otro mensaje
+            nueva = pagina.evaluate(_JS_CABECERA_VISOR)
+            if nueva != cabecera:  # ya es otro mensaje
+                logger.debug("  fin del álbum tras %d elemento(s): el encabezado cambió (%r -> %r)", n, cabecera, nueva)
                 break
     except Exception as e:  # noqa: BLE001
         if "closed" in str(e).lower():

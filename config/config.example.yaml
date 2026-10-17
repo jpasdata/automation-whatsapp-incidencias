@@ -5,7 +5,10 @@ whatsapp:
   # Uno o varios grupos. Basta con que el texto esté CONTENIDO en el título del chat
   # (no hace falta copiar los emojis como ✅).
   grupos:
-    - "NOMBRE_EXACTO_DEL_GRUPO"
+    - "CFFM_Veraguas_Sea_Central-Reporte de videos"
+    - "Incidencias CFFM-MECOPT(Oeste)"
+    - "CFFM_Coclé_Sea_Central-Reporte de videos"
+    - "CFFM_Azuero_Mecoptsa-Reporte de videos"
   # Hasta dónde subir en cada chat para leer el histórico: "mes_actual" (hoy: octubre),
   # una fecha "AAAA-MM-DD", o "" para solo lo que haya cargado.
   cargar_desde: "mes_actual"
@@ -41,7 +44,7 @@ matching:
     "Azuero": ["LOS SANTOS", "HERRERA"]
     "MECOPT(Oeste)": ["PANAMA OESTE"]
   patron_codigo_regex: '\b\d{6,8}\b'
-  ventana_minutos_mensaje_separado: 15   # cuánto tiempo atrás buscar un código en un mensaje de texto anterior del mismo remitente
+  ventana_minutos_mensaje_separado: 45   # minutos hacia atrás/adelante para un texto con número del mismo remitente (medido: P95 antes=42, después=26)
   # PENDIENTE DE CONFIRMAR CON HENRY: cuántas horas después de Fecha SR
   # todavía es normal que llegue la foto/video (en campo suele mandarse
   # un rato después de terminar). 4 horas es un punto de partida, no el

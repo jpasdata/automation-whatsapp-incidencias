@@ -44,7 +44,7 @@ with Indice(RUTA_INDICE) as indice:
     primero, ultimo = indice.rango(grupo)
 
 provincias = provincias_de_grupo(cfg, grupo)
-with tempfile.TemporaryDirectory() as tmp:  # el Excel se lee sobre una copia: el original no se toca
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # el Excel se lee sobre una copia: el original no se toca
     copia = Path(tmp) / "copia.xlsx"
     shutil.copy(cfg.excel.ruta_archivo, copia)
     e = cfg.excel

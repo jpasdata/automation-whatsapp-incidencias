@@ -42,7 +42,7 @@ with Indice(RUTA_INDICE) as indice:
 provincias = provincias_de_grupo(cfg, grupo)
 
 # El Excel se abre sobre una COPIA temporal: este script nunca modifica el original.
-with tempfile.TemporaryDirectory() as tmp:
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     copia = Path(tmp) / "copia.xlsx"
     shutil.copy(cfg.excel.ruta_archivo, copia)
     e = cfg.excel

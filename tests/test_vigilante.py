@@ -1,0 +1,46 @@
+from datetime import datetime
+from pathlib import Path
+
+from src.cruce import ResultadoCruce
+from src.descargas import TareaDescarga
+from src.excel_manager import FilaIncidencia
+from src.indice import Indice
+from src.modelos import Mensaje, ResultadoMatch, TipoOrigenMatch
+from src.vigilante import carpeta_sin_cruce, escribir_manifiestos, reubicar_identificadas
+
+
+def _msg(id_, n=1):
+    return Mensaje(remitente="+507 6000-0001", timestamp=datetime(2026, 10, 9, 14, 5), texto="Aviso 5600001", tiene_adjunto=True,
+                   tipo_adjunto="imagen", id_mensaje=id_, n_adjuntos=n)
+
+
+def test_foto_identificada_despues_se_mueve_a_la_carpeta_de_la_incidencia(tmp_path):
+    with Indice(tmp_path / "i.sqlite3") as ix:
+        ix.guardar("G", [_msg("m1")])
+        viejo = tmp_path / "G" / "2026-10-09" / "_sin_numero"
+        viejo.mkdir(parents=True)
+        f = viejo / "1405_x_m1_1.jpg"
+        f.write_bytes(b"jpg")
+        ix.marcar_descarga("G", "m1", "ok", str(f))
+        nueva = tmp_path / "G" / "2026-10-09" / "231_011600000001"
+        destinos = {"m1": TareaDescarga("m1", nueva, "1405_x_m1", 1, "ok", {"dia": "2026-10-09", "hora": "14:05", "remitente": "x", "origen": "respuesta"})}
+        assert reubicar_identificadas(ix, "G", destinos) == 1
+        assert (nueva / "1405_x_m1_1.jpg").exists() and not f.exists() and not viejo.exists()
+        assert str(nueva / "1405_x_m1_1.jpg") in ix.estado_descarga("G")["m1"][1]
+        assert reubicar_identificadas(ix, "G", destinos) == 0  # ya está donde debe
+
+
+def test_carpeta_para_lo_que_no_cruza():
+    c = lambda estado: ResultadoCruce(ResultadoMatch(_msg("a"), None, TipoOrigenMatch.SIN_CODIGO), None, None, None, None)  # noqa: E731
+    assert carpeta_sin_cruce(c("x")) == "_sin_numero"  # sin candidatos -> estado sin_numero
+
+
+def test_manifiesto_por_dia(tmp_path):
+    with Indice(tmp_path / "i.sqlite3") as ix:
+        m = _msg("m1")
+        ix.guardar("G", [m])
+        fila = FilaIncidencia(231, "011600000001", "1160000", None, "5600001", None, None, None, "")
+        cruce = ResultadoCruce(ResultadoMatch(m, "5600001", TipoOrigenMatch.MISMO_MENSAJE, candidatos=["5600001"]), fila, None, "5600001", None)
+        assert escribir_manifiestos(ix, "G", [cruce], tmp_path, datetime(2026, 10, 1)) == 1
+        csv_ = next(tmp_path.rglob("manifiesto_2026-10-09.csv")).read_text(encoding="utf-8-sig")
+        assert "011600000001" in csv_ and "mismo_mensaje" in csv_ and "pendiente" in csv_
