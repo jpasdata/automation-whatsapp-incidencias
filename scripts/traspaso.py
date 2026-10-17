@@ -16,7 +16,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from src.datos.traspaso import exportar, importar  # noqa: E402
+from src.datos.traspaso import ajustar_config, exportar, importar  # noqa: E402
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 sub = ap.add_subparsers(dest="accion", required=True)
@@ -26,10 +26,14 @@ e.add_argument("--sin-excel", action="store_true", help="no incluir el Excel de 
 i = sub.add_parser("importar")
 i.add_argument("zip", help="ruta del .zip de traspaso")
 i.add_argument("--excel", action="store_true", help="reemplazar también el Excel de incidencias (deja copia del anterior)")
+sub.add_parser("ajustar-config", help="deja config.yaml apuntando a la base de dos hojas (útil tras un git pull)")
 args = ap.parse_args()
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-if args.accion == "exportar":
+if args.accion == "ajustar-config":
+    c = ajustar_config(RAIZ)
+    print("config.yaml ajustado: " + ", ".join(c) if c else "config.yaml ya estaba bien (o no existe).")
+elif args.accion == "exportar":
     ruta = exportar(RAIZ, Path(args.salida) if args.salida else None, con_excel=not args.sin_excel)
     print(f"Traspaso creado: {ruta}  ({ruta.stat().st_size / 1e6:.0f} MB)\nCópialo al otro PC e impórtalo allá con:\n  python scripts/traspaso.py importar \"{ruta.name}\"")
 else:

@@ -88,3 +88,17 @@ def test_importar_con_excel_deja_copia_del_anterior(tmp_path):
     assert any(f.read_bytes() == b"viejo" for f in (pc2 / "data" / "Incidencias" / "respaldo").glob("INCIDENCIAS_BASE_antes_de_importar_*.xlsx"))
     for sub in ("nuevas", "procesadas", "respaldo", "original"):
         assert (pc2 / "data" / "Incidencias" / sub).is_dir()
+
+
+def test_ajustar_config_deja_la_base_de_dos_hojas_sin_tocar_lo_demas(tmp_path):
+    from src.datos.traspaso import ajustar_config
+
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "config.yaml").write_text(
+        'whatsapp:\n  headless: false\nexcel:\n  ruta_archivo: "./viejo.xlsx"   # antes\n  nombre_hoja: "Incidencias"\n  asignado_a: "Otro"\n'
+        '  hojas_extra: []\nmatching:\n  nombre_hoja: "no tocar"\n', encoding="utf-8")
+    assert ajustar_config(tmp_path) == ["ruta_archivo", "nombre_hoja", "hojas_extra"]
+    t = (tmp_path / "config" / "config.yaml").read_text(encoding="utf-8")
+    assert 'ruta_archivo: "./data/Incidencias/INCIDENCIAS_BASE.xlsx"' in t and 'nombre_hoja: "Histórico"' in t and 'hojas_extra: ["Nuevas"]' in t
+    assert 'asignado_a: "Otro"' in t and 'nombre_hoja: "no tocar"' in t and "headless: false" in t
+    assert ajustar_config(tmp_path) == []                                   # idempotente

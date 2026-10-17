@@ -177,7 +177,7 @@ def revisar_excel(cfg, raiz: Path = RAIZ) -> list[Resultado]:
             por_provincia = excel.resumen_por_provincia()
     except Exception as ex:  # noqa: BLE001
         return [_r(ERROR, "Excel de incidencias", f"no se pudo leer: {str(ex)[:160]}",
-                   "Revisa que la hoja y los nombres de columna de config.yaml (sección excel) coincidan con el Excel.")]
+                   "Revisa que la hoja y los nombres de columna de config.yaml (sección excel) coincidan con el Excel (si venías de una versión anterior, corre: python scripts/traspaso.py ajustar-config).")]
     res = [_r(OK, "Excel de incidencias", f"hoja '{cfg.excel.nombre_hoja}', {sum(por_provincia.values())} incidencias")]
     for g in cfg.whatsapp.grupos:
         provs = provincias_de_grupo(cfg, g)

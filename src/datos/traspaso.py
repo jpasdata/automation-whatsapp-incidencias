@@ -10,6 +10,7 @@ Ojo: no correr el bot en los dos PCs a la vez (bajarían lo mismo dos veces).
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import socket
 import sqlite3
@@ -58,6 +59,30 @@ def exportar(raiz: Path, salida: Path | None = None, con_excel: bool = True) -> 
             "incluye_excel": incluye_excel,
         }, ensure_ascii=False, indent=2))
     return destino
+
+
+def ajustar_config(raiz: Path) -> list[str]:
+    """Deja en config/config.yaml la base de dos hojas (ruta, hoja principal y hojas extra) sin tocar comentarios ni lo demás."""
+    ruta = Rutas(raiz).config / "config.yaml"
+    if not ruta.exists():
+        return []
+    deseado = {"ruta_archivo": '"./data/Incidencias/INCIDENCIAS_BASE.xlsx"', "nombre_hoja": '"Histórico"', "hojas_extra": '["Nuevas"]'}
+    lineas, cambios, en_excel = ruta.read_text(encoding="utf-8").splitlines(keepends=True), [], False
+    for i, linea in enumerate(lineas):
+        if linea[:1] not in (" ", "\t", "\r", "\n", "#", ""):
+            en_excel = linea.startswith("excel:")
+        clave, _, resto = linea.strip().partition(":")
+        if en_excel and clave in deseado and linea.startswith(" "):
+            valor, _, comentario = resto.partition(" #")
+            if valor.strip() != deseado[clave]:
+                sangria = linea[:len(linea) - len(linea.lstrip())]
+                fin = "\r\n" if linea.endswith("\r\n") else "\n"
+                lineas[i] = f"{sangria}{clave}: {deseado[clave]}" + (f"   #{comentario}" if comentario else "") + fin
+                cambios.append(clave)
+    if cambios:
+        shutil.copy2(ruta, ruta.with_name("config.antes_de_ajustar.yaml"))
+        ruta.write_text("".join(lineas), encoding="utf-8")
+    return cambios
 
 
 def importar(raiz: Path, zip_ruta: Path, con_excel: bool = False) -> dict:
@@ -111,4 +136,6 @@ def importar(raiz: Path, zip_ruta: Path, con_excel: bool = False) -> dict:
             for sub in ("nuevas", "procesadas", "respaldo", "original"):
                 (r.incidencias / sub).mkdir(parents=True, exist_ok=True)
             resumen["excel_reemplazado"] = reemplazados
+            if "INCIDENCIAS_BASE.xlsx" in reemplazados:
+                resumen["config_ajustada"] = ajustar_config(raiz)     # la config no viaja en el zip, pero debe apuntar a la base nueva
     return resumen
