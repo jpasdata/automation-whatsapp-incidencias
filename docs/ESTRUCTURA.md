@@ -4,17 +4,17 @@ Todo está organizado por tema para encontrar rápido dónde está cada cosa. La
 
 ```
 whatsapp_incidencias/
-├── Iniciar_interfaz.bat · Crear_config.bat · Actualizar_proyecto.bat     accesos directos (Windows)
+├── Iniciar_interfaz.bat · Crear_config.bat · Actualizar_proyecto.bat · Cargar_incidencias.bat     accesos directos (Windows)
 ├── config/                  config.example.yaml (plantilla) · config.yaml (real, no se sube a git)
 ├── src/                     el código, por tema (ver abajo)
 ├── scripts/                 puntos de entrada (ver README) · diagnostico/ (pruebas en vivo repetibles)
 ├── tests/                   pruebas automáticas (pytest)
 ├── docs/                    esta documentación
 ├── data/
-│   ├── Incidencias/         INCIDENCIAS_BASE.xlsx (la base, UNA hoja) · nuevas/ (aquí pones las nuevas) · procesadas/ · respaldo/ · original/
+│   ├── Incidencias/         INCIDENCIAS_BASE.xlsx (el ÚNICO Excel: hojas Histórico y Nuevas) · nuevas/ · procesadas/ · respaldo/ · original/
 │   ├── indice/              indice.sqlite3 (mensajes leídos + estado de descarga) · respaldo/
 │   ├── Evidencias_WhatsApp/ <Grupo>/<día>/<Inc-…_Aviso-… | _otras_incidencias/… | _sin_numero>/  + manifiesto_<día>.csv
-│   ├── Reportes/            en_vivo/ (Excel que el bot reescribe solo) · historial/ (reportes con fecha) · analisis/
+│   ├── Reportes/            en_vivo/ (tablero Cruce_en_vivo.xlsx) · historial/ (reportes con fecha) · analisis/
 │   └── Traspasos/           .zip para pasar el avance a otro PC
 ├── logs/
 │   ├── corridas/<AAAA-MM-DD>/<HHMMSS>_<modo>/    logs de CADA corrida: automatizacion_001.log, detalle_001.log (se parten por tamaño),
@@ -51,9 +51,9 @@ whatsapp_incidencias/
 ## Flujo de datos
 
 ```
-data/Incidencias/nuevas/  ──incorporar──►  INCIDENCIAS_BASE.xlsx ──┐
+Cargar incidencias (botón / arrastrar .xlsx)  ──►  INCIDENCIAS_BASE.xlsx (Histórico + Nuevas) ──┐
                                                                    ├─ cruce ─► plan ─► descargar ─► Evidencias_WhatsApp/
 WhatsApp Web ──leer──► indice.sqlite3 ─────────────────────────────┘                      │
                                    │                                                       └─► Excel en vivo (Estado_Automatico, Ruta_Evidencia)
-                                   └─► logs/corridas/<fecha>/<hora>_<modo>/
+                                   └─► logs/corridas/<fecha>/<hora>_<modo>/        (el estado del cruce se escribe dentro de INCIDENCIAS_BASE.xlsx)
 ```

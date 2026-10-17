@@ -67,7 +67,7 @@ from datetime import datetime  # noqa: E402
 
 _desde = resolver_cargar_desde(cfg.whatsapp.cargar_desde) or datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 vivo = ExcelEnVivo(cfg, _desde, grupos_cfg)
-logger.info("Excel en vivo: %s y %s (se reescriben solos cuando hay novedades).", vivo.ruta_reporte, vivo.ruta_cruzado)
+logger.info("Excel en vivo: estado dentro de %s y tablero en %s (se actualizan solos cuando hay novedades).", vivo.ruta_base, vivo.ruta_reporte)
 
 try:
     with candado_sesion():

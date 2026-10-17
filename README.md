@@ -27,21 +27,32 @@ fotos y videos** (organizados por día y por aviso/incidencia), **los cruza cont
 | Actualizar este PC | `Actualizar_proyecto.bat` (o botón «Actualizar desde GitHub») | Baja la versión nueva, quita residuos del proceso anterior, regenera `config.yaml` (deja `config.yaml.respaldo`) y verifica. No toca `data/` ni la sesión. |
 | Comportamiento del grupo | `python scripts/analizar_comportamiento.py` | Estadísticas de cómo reporta la gente (guía las ventanas de espera). |
 
-## Base de incidencias (`data/Incidencias/`)
+## El Excel de incidencias (UN solo archivo, dos hojas)
 
-- **`INCIDENCIAS_BASE.xlsx`**: una sola hoja, una fila por incidencia, con todo lo del Excel original (7 hojas) y el historial de reasignaciones.
-- **Incidencias nuevas**: deja el Excel (el formato de asignación de siempre) en **`data/Incidencias/nuevas/`**. El vigilante lo detecta y lo
-  incorpora solo; también con el botón «Incorporar incidencias nuevas» o `python scripts/incidencias.py incorporar`. La incidencia nueva se agrega;
-  si ya existía, manda la última asignación y las anteriores quedan en «Historial de asignaciones». Soltar el mismo archivo dos veces no duplica nada.
-  El archivo pasa a `procesadas/` y antes de cada cambio se guarda una copia en `respaldo/`.
-- Crear la base desde el Excel original de varias hojas (una sola vez): `python scripts/incidencias.py crear`. El original queda intacto en `original/`.
+`data/Incidencias/INCIDENCIAS_BASE.xlsx` es el **único** Excel de incidencias. Funciona con cualquier programa de hojas de cálculo (Excel, LibreOffice, WPS…).
+
+| Hoja | Qué tiene |
+|---|---|
+| **Histórico** | Todo lo que ya se procesó: una fila por incidencia, con lo de las 7 hojas del Excel original y el historial de reasignaciones |
+| **Nuevas** | Lo que va llegando. Cuando ya se procesó, se pasa al Histórico con un botón |
+
+Filas bajas (una línea cada una) y columnas anchas para el texto largo, así los registros no se agrandan. El **estado del cruce** (`Estado_Automatico`, `Ruta_Evidencia`)
+lo escribe el bot dentro de este mismo archivo, coloreado; no hay copias aparte.
+
+### Cargar incidencias nuevas (sin buscar carpetas)
+1. **Botón «Cargar incidencias nuevas…»** de la interfaz: eliges el/los Excel y listo.
+2. **Arrastrar y soltar**: arrastra el Excel sobre `Cargar_incidencias.bat` (con doble clic te deja elegirlo).
+3. Por terminal: `python scripts/incidencias.py cargar ARCHIVO.xlsx`.
+
+La incidencia nueva entra a «Nuevas»; si ya existía, manda la última asignación y las anteriores quedan en «Historial de asignaciones». Cargar el mismo contenido otra vez no duplica nada.
+Los originales no se tocan (se copian). Si el bot está corriendo, deja los archivos y el vigilante los incorpora solo. Si la base está abierta en otro programa, avisa y reintenta.
+«Pasar lo nuevo al histórico» (botón o `python scripts/incidencias.py consolidar`) mueve lo de «Nuevas» a «Histórico». Antes de cada cambio se guarda copia en `data/Incidencias/respaldo/`.
+Crear la base desde el Excel original de varias hojas (una sola vez): `python scripts/incidencias.py crear`.
 
 ## Resultados
 
-- **Excel en tiempo real** (se reescribe solo con cada novedad): `data/Reportes/en_vivo/`
-  - `RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx` — copia de tu Excel con `Estado_Automatico` y `Ruta_Evidencia` en cada fila (verde/ámbar/rojo)
-  - `Cruce_en_vivo.xlsx` — resumen, por incidencia, por día, descargas, sin cruce
-  - El Excel original **nunca se modifica**. Si lo tienes abierto, el archivo queda bloqueado y se reintenta en la siguiente actualización.
+- **Estado del cruce en tiempo real**: dentro de `INCIDENCIAS_BASE.xlsx` (columnas `Estado_Automatico` y `Ruta_Evidencia`, verde/ámbar/rojo), y el tablero `data/Reportes/en_vivo/Cruce_en_vivo.xlsx`
+    (resumen, por incidencia, por día, descargas, sin cruce). Si el archivo está abierto en otro programa, se reintenta en la siguiente actualización.
 - **Evidencias**: `data/Evidencias_WhatsApp/<Grupo>/<día>/`
   - `Inc-1168222_Aviso-5620125_f230/` — cruza con el Excel (`f` = fila del Excel)
   - `_otras_incidencias/Aviso-5633273/` — el chat trae un número que no está en el Excel

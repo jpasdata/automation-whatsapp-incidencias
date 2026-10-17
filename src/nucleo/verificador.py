@@ -165,7 +165,8 @@ def revisar_excel(cfg, raiz: Path = RAIZ) -> list[Resultado]:
         ruta = raiz / ruta
     if not ruta.exists():
         return [_r(ERROR, "Excel de incidencias", f"no existe {ruta}",
-                   "Copia el Excel a esa ruta o corrige excel.ruta_archivo en config.yaml (debe estar cerrado en Excel).")]
+                   "Si este PC es nuevo: abre la interfaz, pulsa «Importar traspaso» y responde «sí» a reemplazar el Excel (la base viaja en el traspaso). "
+                   "O copia INCIDENCIAS_BASE.xlsx a data\\Incidencias\\. También puedes crearla desde el Excel original: python scripts/incidencias.py crear.")]
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             copia = Path(tmp) / "copia.xlsx"

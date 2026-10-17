@@ -17,7 +17,7 @@ whatsapp:
 
 excel:
   ruta_archivo: "./data/Incidencias/INCIDENCIAS_BASE.xlsx"   # la base (una hoja). Las incidencias nuevas se dejan en data/Incidencias/nuevas/
-  nombre_hoja: "Incidencias"
+  nombre_hoja: "Histórico"     # hoja con todo lo procesado; la hoja «Nuevas» (lo que va llegando) se lee con hojas_extra
   columna_codigo_largo: "COD-INCIDENCIA"    # ej. 011682220001
   columna_codigo_corto: "Incidencia"        # ej. 1168222
   columna_evidencia_manual: "EVIDENCIA"     # notas libres existentes de Jeam/Henry — NO se sobreescribe
@@ -34,7 +34,7 @@ excel:
   # Más hojas del mismo Excel con incidencias asignadas (se cruzan igual; las repetidas de la hoja principal se ignoran).
   # Solo se cruzan las filas con este responsable en la columna "Asignado a" (las demás quedan en la base pero el bot las ignora).
   asignado_a: "Henry"
-  hojas_extra: []   # ya no hacen falta: la base unifica todas las hojas
+  hojas_extra: ["Nuevas"]
 
 # --- PENDIENTE DE DEFINIR (ver Fase 0 / README) ---
 # El formato real del código que escriben en el grupo todavía no está confirmado.

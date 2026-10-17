@@ -95,12 +95,13 @@ class Interfaz:
         boton("✔  Verificar entorno", self.verificar_entorno)
         boton("📈  Estado de descargas", self.ver_estado_descargas)
         seccion("Resultados")
-        boton("📊  Abrir Excel en vivo", self.abrir_excel_vivo)
+        boton("📊  Abrir Excel de incidencias", self.abrir_excel_vivo)
         boton("🧾  Generar reporte Excel", self.generar_reporte)
         boton("🗂  Abrir evidencias", lambda: os.startfile(RAIZ_EVIDENCIAS))
         boton("📜  Abrir logs (última corrida)", self.abrir_logs)
         boton("🗒  Abrir carpeta de incidencias", lambda: os.startfile(R.incidencias))
-        boton("➕  Incorporar incidencias nuevas", self.incorporar_incidencias)
+        boton("➕  Cargar incidencias nuevas…", self.cargar_incidencias, color=AZUL)
+        boton("📥  Pasar lo nuevo al histórico", self.consolidar_incidencias)
         seccion("Mantenimiento")
         boton("🧹  Limpiar y ordenar", self.limpiar)
         boton("⬇  Actualizar desde GitHub", self.actualizar_proyecto)
@@ -264,12 +265,13 @@ class Interfaz:
         self._mostrar(resumen_descargas())
 
     def abrir_excel_vivo(self) -> None:
-        """Abre el Excel cruzado que el bot reescribe solo (data/Reportes/RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx)."""
-        ruta = R.reportes_en_vivo / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
+        """Abre el ÚNICO Excel de incidencias (hojas Histórico y Nuevas, con el estado del cruce que escribe el bot)."""
+        ruta = Path(self.cfg.excel.ruta_archivo)
+        ruta = ruta if ruta.is_absolute() else R.raiz / ruta
         if ruta.exists():
             os.startfile(ruta)
         else:
-            self._estado("Aún no hay Excel en vivo (se crea con la primera vuelta)", AMBAR)
+            self._estado("Aún no hay Excel de incidencias: importa un traspaso o crea la base", AMBAR)
 
     def abrir_logs(self) -> None:
         """Abre la carpeta de la corrida más reciente (o logs/ si todavía no hay ninguna)."""
@@ -286,6 +288,35 @@ class Interfaz:
         p = self._ejecutar(["scripts/incidencias.py", "incorporar"])
         self._mostrar((p.stdout + p.stderr).strip())
         self._estado("Incidencias incorporadas" if p.returncode == 0 else "Error al incorporar incidencias", VERDE if p.returncode == 0 else ROJO)
+
+    def cargar_incidencias(self) -> None:
+        """LA forma fácil de cargar incidencias: elige uno o varios Excel y listo (se copian a data/Incidencias/nuevas/ y se incorporan a la base)."""
+        archivos = filedialog.askopenfilenames(title="Elige el/los Excel con las incidencias nuevas", filetypes=[("Excel", "*.xlsx")])
+        if not archivos:
+            return
+        self._estado("Cargando incidencias…", AZUL)
+        self.r.update_idletasks()
+        if self._corriendo():     # el vigilante ya incorpora lo que encuentre en nuevas/: solo se dejan los archivos
+            from src.excel.incidencias import cargar_archivos
+
+            r = cargar_archivos(R.incidencias, [Path(a) for a in archivos], incorporar=False)
+            self._mostrar(f"Archivos dejados en data/Incidencias/nuevas/: {r['copiados']}\nEl vigilante los incorpora a la base en su próxima vuelta.")
+            self._estado("Archivos dejados: el vigilante los incorpora solo", VERDE)
+            return
+        p = self._ejecutar(["scripts/incidencias.py", "cargar", *archivos])
+        self._mostrar((p.stdout + p.stderr).strip())
+        self._estado("Incidencias cargadas" if p.returncode == 0 else "Error al cargar incidencias", VERDE if p.returncode == 0 else ROJO)
+
+    def consolidar_incidencias(self) -> None:
+        """Pasa lo de la hoja «Nuevas» a «Histórico» cuando ya se procesó."""
+        if self._corriendo():
+            messagebox.showwarning("Pasar al histórico", "Detén primero el bot (botón DETENER) y vuelve a intentar.")
+            return
+        if not messagebox.askyesno("Pasar al histórico", "Esto mueve todas las incidencias de la hoja «Nuevas» a «Histórico» (se deja copia de la base).\n\n¿Continuar?"):
+            return
+        p = self._ejecutar(["scripts/incidencias.py", "consolidar"])
+        self._mostrar((p.stdout + p.stderr).strip())
+        self._estado("Hecho" if p.returncode == 0 else "Error al pasar al histórico", VERDE if p.returncode == 0 else ROJO)
 
     def _ejecutar(self, args: list[str]) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, *args], cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",

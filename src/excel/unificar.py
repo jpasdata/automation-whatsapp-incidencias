@@ -13,6 +13,7 @@ El archivo original NO se modifica: se escribe uno nuevo.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections import OrderedDict, defaultdict
 from datetime import datetime
@@ -22,7 +23,10 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-NOMBRE_HOJA = "Incidencias"
+HOJA_HISTORICO, HOJA_NUEVAS = "Histórico", "Nuevas"
+NOMBRE_HOJA = HOJA_HISTORICO   # (compatibilidad) hoja principal
+HOJAS_BASE = (HOJA_HISTORICO, HOJA_NUEVAS)
+ALTO_FILA = 18                 # las filas NO crecen: el texto largo va en columnas anchas, sin ajustar
 PRIORIDAD_HOJA = {"Asignacion- SEP": 0, "OCTUBRE": 1, "c ya entregados sin correo": 2}
 BAND = {"ident": "1F3864", "fechas": "2E75B6", "causa": "7F6000", "evid": "375623", "anexos": "7030A0", "cierre": "833C0B", "acciones": "595959", "bot": "0B6E4F"}
 
@@ -262,45 +266,64 @@ def _columnas_para(unificadas: dict) -> list[tuple]:
     return cols
 
 
-def _escribir(unificadas: dict, ruta_salida: Path) -> dict:
-    global COLUMNAS_USADAS
-    for d in unificadas.values():
-        if d.get("_conflictos"):
-            d["Notas de consolidación"] = "\n".join(d["_conflictos"])
-    cols = COLUMNAS_USADAS = _columnas_para(unificadas)
-    wb = Workbook()
-    ws = wb.active
-    ws.title = NOMBRE_HOJA
+# Anchos para las columnas de texto largo (así cada registro ocupa UNA fila baja en vez de crecer hacia abajo)
+ANCHO_TEXTO = {
+    "Descripcion": 60, "Observaciones": 110, "EVIDENCIA": 75, "Historial de asignaciones": 130, "Notas de consolidación": 80,
+    "Instalación": 32, "causa_agrupadora": 26, "Origen": 36, "Pendiente de evidencia": 36, "JT": 30, "Cierre · Asunto": 52,
+    "Cierre · Ficheros": 52, "Cierre · OBSERVACION": 60, "Acciones · Causa / Detalle": 52, "Acciones · Otras pruebas en PDF Actual": 75,
+    "Acciones · Otras pruebas a Colocar (Propuesto)": 75, "Acciones · Acción Aplicada": 52, "Estado_Automatico": 46, "Ruta_Evidencia": 80,
+}
+
+
+def _hoja_base(wb: Workbook, titulo: str, filas: dict, cols: list[tuple], color_pestana: str) -> None:
+    ws = wb.create_sheet(titulo)
+    ws.sheet_properties.tabColor = color_pestana
     fino = Side(style="thin", color="D9D9D9")
-    for c, (clave, titulo, grupo, ancho) in enumerate(cols, 1):
-        h = ws.cell(row=1, column=c, value=titulo)
+    for c, (clave, titulo_col, grupo, ancho) in enumerate(cols, 1):
+        h = ws.cell(row=1, column=c, value=titulo_col)
         h.font, h.fill = Font(bold=True, color="FFFFFF", size=10), PatternFill("solid", fgColor=BAND[grupo])
         h.alignment, h.border = Alignment(horizontal="center", vertical="center", wrap_text=True), Border(bottom=Side(style="medium", color="FFFFFF"))
-        ws.column_dimensions[get_column_letter(c)].width = ancho
+        ws.column_dimensions[get_column_letter(c)].width = max(ancho, ANCHO_TEXTO.get(clave, 0))
     ws.row_dimensions[1].height = 34
 
     def clave_orden(item):
-        d = item[1]
-        f = d.get("Fecha Detección")
+        f = item[1].get("Fecha Detección")
         return (f if isinstance(f, datetime) else datetime.max, item[0])
 
-    for r, (inc, d) in enumerate(sorted(unificadas.items(), key=clave_orden), 2):
-        for c, (clave, titulo, grupo, ancho) in enumerate(cols, 1):
+    for r, (inc, d) in enumerate(sorted(filas.items(), key=clave_orden), 2):
+        ws.row_dimensions[r].height = ALTO_FILA
+        for c, (clave, titulo_col, grupo, ancho) in enumerate(cols, 1):
             v = d.get(clave)
-            celda = ws.cell(row=r, column=c, value=(int(v) if clave == "Incidencia" else v))
-            celda.alignment = Alignment(vertical="top", wrap_text=ancho >= 24)
+            celda = ws.cell(row=r, column=c, value=(int(v) if clave == "Incidencia" and v is not None else v))
+            celda.alignment = Alignment(vertical="center", wrap_text=False)   # sin ajustar texto: la fila no crece
             celda.border = Border(bottom=fino)
             if clave in COLUMNAS_FECHA:
                 celda.number_format = "dd/mm/yyyy hh:mm" if clave != "ASIGNACION" else "dd/mm/yyyy"
             if r % 2 == 1:
                 celda.fill = PatternFill("solid", fgColor="F7F9FC")
     ws.freeze_panes = "C2"
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(cols))}{len(unificadas) + 1}"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(cols))}{max(len(filas), 1) + 1}"
     ws.sheet_view.zoomScale = 90
-    # grupos plegables (Excel: botones [-] / [+] arriba) para las columnas menos usadas; quedan visibles
-    for grupo in ("anexos", "cierre", "acciones"):
+    for grupo in ("anexos", "cierre", "acciones"):   # grupos plegables ([-] / [+] arriba en Excel); quedan visibles
         idx = [c for c, col in enumerate(cols, 1) if col[2] == grupo]
         ws.column_dimensions.group(get_column_letter(idx[0]), get_column_letter(idx[-1]), outline_level=1, hidden=False)
+
+
+def _escribir(unificadas: dict, ruta_salida: Path) -> dict:
+    """Escribe el libro con DOS hojas: «Histórico» (todo lo procesado) y «Nuevas» (lo que va llegando). La fila lleva su hoja en `_hoja`."""
+    global COLUMNAS_USADAS
+    for d in unificadas.values():
+        if d.get("_conflictos"):
+            d["Notas de consolidación"] = "\n".join(d["_conflictos"])
+    cols = COLUMNAS_USADAS = _columnas_para(unificadas)
+    nuevas = {k: v for k, v in unificadas.items() if v.get("_hoja") == HOJA_NUEVAS}
+    historico = {k: v for k, v in unificadas.items() if k not in nuevas}
+    wb = Workbook()
+    wb.remove(wb.active)
+    _hoja_base(wb, HOJA_HISTORICO, historico, cols, "1F3864")
+    _hoja_base(wb, HOJA_NUEVAS, nuevas, cols, "16A34A")
     ruta_salida.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(ruta_salida)
-    return {"incidencias": len(unificadas), "columnas": len(cols), "salida": str(ruta_salida)}
+    tmp = ruta_salida.with_suffix(".tmp.xlsx")
+    wb.save(tmp)
+    os.replace(tmp, ruta_salida)
+    return {"incidencias": len(unificadas), "historico": len(historico), "nuevas": len(nuevas), "columnas": len(cols), "salida": str(ruta_salida)}

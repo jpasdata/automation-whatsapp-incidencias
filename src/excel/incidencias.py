@@ -1,7 +1,8 @@
 """
 Base de incidencias en una carpeta (data/Incidencias/):
 
-    INCIDENCIAS_BASE.xlsx   la base: UNA hoja ("Incidencias"), una fila por incidencia, con historial de reasignaciones.
+    INCIDENCIAS_BASE.xlsx   el ÚNICO Excel: hoja «Histórico» (todo lo procesado) y hoja «Nuevas» (lo que va llegando), una fila por incidencia,
+                            con historial de reasignaciones y el estado del cruce que escribe el bot.
     nuevas/                 AQUÍ se ponen los Excel con incidencias nuevas (formato de asignación de siempre, o esta misma base).
     procesadas/             los archivos de `nuevas/` ya incorporados (con la fecha delante), por si hay que revisar algo.
     respaldo/               copia de la base antes de cada incorporación.
@@ -48,9 +49,15 @@ def preparar_carpeta(carpeta: Path) -> Path:
     return carpeta
 
 
+def es_temporal(nombre: str) -> bool:
+    """Archivos de bloqueo/temporales que crean Excel (~$x.xlsx), LibreOffice (.~lock.x.xlsx#), WPS (~x.xlsx) y nuestro propio .tmp.xlsx."""
+    n = nombre.lower()
+    return n.startswith(("~", ".~", ".")) or n.endswith((".tmp.xlsx", ".tmp", "#")) or ".~lock." in n
+
+
 def archivos_nuevos(carpeta: Path) -> list[Path]:
     nuevas = carpeta / "nuevas"
-    return sorted(f for f in nuevas.glob("*.xlsx") if not f.name.startswith("~$")) if nuevas.exists() else []
+    return sorted(f for f in nuevas.glob("*.xlsx") if not es_temporal(f.name)) if nuevas.exists() else []
 
 
 def _titulo_a_clave() -> dict[str, str]:
@@ -58,24 +65,49 @@ def _titulo_a_clave() -> dict[str, str]:
 
 
 def leer_base(ruta: Path) -> dict[str, dict]:
-    """{incidencia: fila} con las columnas por su nombre interno."""
+    """{incidencia: fila} de las dos hojas (Histórico y Nuevas); cada fila lleva su hoja en `_hoja`. Acepta la base antigua de una sola hoja."""
     if not ruta.exists():
         return {}
     wb = load_workbook(ruta, data_only=True, read_only=True)
     try:
-        filas = [list(r) for r in wb[U.NOMBRE_HOJA].iter_rows(values_only=True)]
+        hojas = {n: [list(r) for r in wb[n].iter_rows(values_only=True)] for n in wb.sheetnames if n in (*U.HOJAS_BASE, "Incidencias")}
     finally:
         wb.close()  # en modo lectura openpyxl deja el archivo abierto: en Windows impediría moverlo o reemplazarlo
     mapa = _titulo_a_clave()
-    claves = [mapa.get(str(t).strip(), str(t).strip()) if t is not None else "" for t in filas[0]]
     base: dict[str, dict] = {}
-    for r in filas[1:]:
-        d = {claves[j]: U._limpio(r[j]) for j in range(min(len(claves), len(r))) if claves[j] and not U._vacio(r[j])}
-        inc = U._inc(d.get("Incidencia"))
-        if inc:
+    for nombre, filas in hojas.items():
+        if not filas:
+            continue
+        claves = [mapa.get(str(t).strip(), str(t).strip()) if t is not None else "" for t in filas[0]]
+        for r in filas[1:]:
+            d = {claves[j]: U._limpio(r[j]) for j in range(min(len(claves), len(r))) if claves[j] and not U._vacio(r[j])}
+            inc = U._inc(d.get("Incidencia"))
+            if not inc:
+                continue
             d["Incidencia"] = inc
+            if nombre == U.HOJA_NUEVAS:
+                d["_hoja"] = U.HOJA_NUEVAS
+            elif nombre == "Incidencias":      # base antigua (una sola hoja): lo que vino solo de un archivo nuevo es «Nuevas»
+                origen = str(d.get("Origen", ""))
+                d["_hoja"] = U.HOJA_NUEVAS if origen.endswith(".xlsx") and "," not in origen else U.HOJA_HISTORICO
+            else:
+                d["_hoja"] = U.HOJA_HISTORICO
             base[inc] = d
     return base
+
+
+def consolidar_nuevas(carpeta: Path) -> int:
+    """Pasa todo lo de la hoja «Nuevas» a «Histórico» (cuando ya se procesó). Deja copia de la base. Devuelve cuántas incidencias pasaron."""
+    ruta_base = preparar_carpeta(carpeta) / NOMBRE_BASE
+    base = leer_base(ruta_base)
+    pasan = [k for k, v in base.items() if v.get("_hoja") == U.HOJA_NUEVAS]
+    if not pasan:
+        return 0
+    shutil.copy2(ruta_base, carpeta / "respaldo" / f"INCIDENCIAS_BASE_{datetime.now():%Y%m%d_%H%M%S}.xlsx")
+    for k in pasan:
+        base[k]["_hoja"] = U.HOJA_HISTORICO
+    U._escribir(base, ruta_base)
+    return len(pasan)
 
 
 def leer_archivo_nuevo(ruta: Path) -> list[tuple[str, int, dict]]:
@@ -126,6 +158,25 @@ def _combinar_notas(fila: dict, nueva: str | None, fecha) -> None:
         fila["EVIDENCIA"] = f"{previa}\n{prefijo}{nueva}"
 
 
+def _norm(v) -> str:
+    return " ".join(str(v if v is not None else "").split()).lower()
+
+
+def _distinto(clave: str, nuevo, actual_fila: dict) -> bool:
+    """¿Es un cambio REAL? Ignora mayúsculas/espacios, avisos que ya estaban (en cualquier orden) y notas que ya están contenidas."""
+    actual = actual_fila.get(clave)
+    n, a = _norm(nuevo), _norm(actual)
+    if n == a:
+        return False
+    if clave == "NUMERO AVISO":
+        nuevos = {"".join(m) for m in U.RX_AVISO.findall(str(nuevo))}
+        previos = {"".join(m) for m in U.RX_AVISO.findall(f"{actual or ''} {actual_fila.get('Otros avisos') or ''}")}
+        return not (nuevos and nuevos <= previos)
+    if clave in ("EVIDENCIA", "Observaciones", "Descripcion"):
+        return n not in a                       # ya está dentro (la base puede traerla ampliada o combinada con otras notas)
+    return True
+
+
 def fusionar(base: dict[str, dict], nuevas: list[tuple[str, int, dict]]) -> dict[str, int]:
     """Mezcla filas nuevas en `base` (se modifica). Devuelve cuántas incidencias se agregaron, actualizaron o ya estaban."""
     cuenta = {"agregadas": 0, "actualizadas": 0, "sin_cambios": 0}
@@ -134,7 +185,7 @@ def fusionar(base: dict[str, dict], nuevas: list[tuple[str, int, dict]]) -> dict
         marca = f"[{origen}, fila {fila}]"
         d = {k: v for k, v in d.items() if not U._vacio(v) and k not in COLUMNAS_DEL_BOT}
         if inc not in base:
-            nueva = dict(d, Incidencia=inc, Origen=origen)
+            nueva = dict(d, Incidencia=inc, Origen=origen, _hoja=U.HOJA_NUEVAS)
             avisos = ["".join(m) for m in U.RX_AVISO.findall(str(d.get("NUMERO AVISO", "")))]
             if len(avisos) > 1:
                 nueva["NUMERO AVISO"], nueva["Otros avisos"] = avisos[-1], ", ".join(avisos[:-1])
@@ -148,9 +199,11 @@ def fusionar(base: dict[str, dict], nuevas: list[tuple[str, int, dict]]) -> dict
             continue
         fecha_nueva, fecha_actual = d.get("ASIGNACION"), actual.get("ASIGNACION")
         es_mas_reciente = not (isinstance(fecha_nueva, datetime) and isinstance(fecha_actual, datetime)) or fecha_nueva >= fecha_actual
+        historial = str(actual.get("Historial de asignaciones") or "")
         diferencias = {k: v for k, v in d.items() if k not in ("Incidencia", "ASIGNACION", "Origen", "N° de asignaciones", "Historial de asignaciones")
-                       and str(v).strip() != str(actual.get(k, "")).strip()}
-        if not diferencias and fecha_nueva == fecha_actual:
+                       and _distinto(k, v, actual) and f"{k}: {v}" not in historial}     # lo ya anotado en el historial no cuenta como cambio nuevo
+        ya_registrada = isinstance(fecha_nueva, datetime) and (fecha_nueva == fecha_actual or f"{fecha_nueva:%d/%m/%Y}" in historial)
+        if not diferencias and ya_registrada:          # nada nuevo y esa asignación ya consta (en la fila o en su historial)
             cuenta["sin_cambios"] += 1
             continue
         # historial: la fila anterior (si es la primera vez) y la nueva
@@ -177,12 +230,39 @@ def fusionar(base: dict[str, dict], nuevas: list[tuple[str, int, dict]]) -> dict
                 viejos = [a for a in ([actual.get("NUMERO AVISO")] + str(actual.get("Otros avisos") or "").split(", ")) if a and a not in nuevos_avisos]
                 actual["NUMERO AVISO"] = nuevos_avisos[-1]
                 actual["Otros avisos"] = ", ".join(dict.fromkeys([*nuevos_avisos[:-1], *viejos])) or None
-        else:  # asignación anterior a la que ya hay: solo se suman sus avisos
+        else:  # asignación anterior a la que ya hay: manda la actual, pero se completan las columnas que la base no tenía y se suman sus avisos
+            for k, v in d.items():
+                if k not in ("Incidencia", "ASIGNACION", "Origen", "N° de asignaciones", "Historial de asignaciones") and U._vacio(actual.get(k)):
+                    actual[k] = v
             extra = [a for a in nuevos_avisos if a != str(actual.get("NUMERO AVISO", ""))]
             if extra:
                 actual["Otros avisos"] = ", ".join(dict.fromkeys([*str(actual.get("Otros avisos") or "").split(", "), *extra])).strip(", ")
         cuenta["actualizadas"] += 1
     return cuenta
+
+
+def cargar_archivos(carpeta: Path, archivos: list[Path], incorporar: bool = True) -> dict:
+    """
+    Forma FÁCIL de cargar incidencias: se le dan los Excel (de donde estén) y se encarga de dejarlos en `nuevas/` y, si `incorporar`, de
+    mezclarlos en la base de una vez. Los originales no se tocan (se copian). Devuelve el resumen de `incorporar_nuevas` más lo copiado.
+    """
+    carpeta = preparar_carpeta(carpeta)
+    copiados, invalidos = [], []
+    for a in archivos:
+        a = Path(a)
+        if not a.exists() or a.suffix.lower() != ".xlsx" or es_temporal(a.name):
+            invalidos.append(a.name)
+            continue
+        destino = carpeta / "nuevas" / a.name
+        k = 1
+        while destino.exists():                       # mismo nombre ya en nuevas/: se numera, no se pisa
+            destino = carpeta / "nuevas" / f"{a.stem}_{k}{a.suffix}"
+            k += 1
+        shutil.copy2(a, destino)
+        copiados.append(destino.name)
+    resumen = incorporar_nuevas(carpeta) if (incorporar and copiados) else {}
+    resumen.update(copiados=copiados, invalidos=invalidos)
+    return resumen
 
 
 def incorporar_nuevas(carpeta: Path) -> dict:
@@ -195,7 +275,7 @@ def incorporar_nuevas(carpeta: Path) -> dict:
     base = leer_base(ruta_base)
     if ruta_base.exists():
         shutil.copy2(ruta_base, carpeta / "respaldo" / f"INCIDENCIAS_BASE_{datetime.now():%Y%m%d_%H%M%S}.xlsx")
-    total = {"archivos": 0, "agregadas": 0, "actualizadas": 0, "sin_cambios": 0, "omitidos": [], "sin_mover": []}
+    total = {"archivos": 0, "agregadas": 0, "actualizadas": 0, "sin_cambios": 0, "omitidos": [], "sin_mover": [], "base_bloqueada": False}
     procesar: list[Path] = []
     for f in archivos:
         try:
@@ -215,12 +295,18 @@ def incorporar_nuevas(carpeta: Path) -> dict:
         total["archivos"] += 1
         procesar.append(f)
     if procesar:
-        U._escribir({k: v for k, v in base.items()}, ruta_base)
+        try:
+            U._escribir({k: v for k, v in base.items()}, ruta_base)
+        except PermissionError:
+            logger.warning("La base de incidencias está abierta en otro programa (Excel, LibreOffice, WPS…) y no se pudo guardar: ciérrala. "
+                           "Los archivos siguen en nuevas/ y se incorporarán en el próximo intento.")
+            total["base_bloqueada"] = True
+            return total
         total["sin_mover"] = []
         for f in procesar:
             try:
                 f.replace(carpeta / "procesadas" / f"{datetime.now():%Y%m%d_%H%M%S}_{f.name}")
             except PermissionError:  # abierto en Excel: ya quedó incorporado (no se duplica); se moverá en la próxima corrida
-                logger.warning("'%s' ya se incorporó, pero está abierto en Excel y no se pudo mover a procesadas/: ciérralo.", f.name)
+                logger.warning("'%s' ya se incorporó, pero está abierto en otro programa (Excel, LibreOffice…) y no se pudo mover a procesadas/: ciérralo.", f.name)
                 total["sin_mover"].append(f.name)
     return total

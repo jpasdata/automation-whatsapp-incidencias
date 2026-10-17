@@ -74,7 +74,7 @@ def test_arranca_con_todos_los_botones(ui):
         return out
 
     textos = " | ".join(botones(ui.r))
-    for esperado in ("INICIAR", "Verificar entorno", "Estado de descargas", "Abrir Excel en vivo", "Generar reporte Excel", "Abrir evidencias",
+    for esperado in ("INICIAR", "Verificar entorno", "Estado de descargas", "Abrir Excel de incidencias", "Generar reporte Excel", "Abrir evidencias",
                      "Abrir logs", "Limpiar y ordenar", "Actualizar desde GitHub", "Exportar traspaso a otro PC", "Importar traspaso", "Limpiar vista"):
         assert esperado in textos, esperado
 
@@ -98,10 +98,10 @@ def test_abrir_excel_en_vivo_existe_y_no_existe(ui, monkeypatch, tmp_path):
     from src.nucleo.rutas import Rutas
 
     monkeypatch.setattr(ui_mod, "R", Rutas(tmp_path))
+    f = tmp_path / "base.xlsx"
+    monkeypatch.setattr(ui.cfg.excel, "ruta_archivo", str(f))
     ui.abrir_excel_vivo()
-    assert abiertos == [] and "Aún no hay Excel en vivo" in ui.estado.get()
-    (tmp_path / "data" / "Reportes" / "en_vivo").mkdir(parents=True)
-    f = tmp_path / "data" / "Reportes" / "en_vivo" / "RESULTADO_CREACION_INCIDENCIAS_CRUZADO.xlsx"
+    assert abiertos == [] and "Aún no hay Excel de incidencias" in ui.estado.get()
     f.write_bytes(b"x")
     ui.abrir_excel_vivo()
     assert abiertos == [f]
@@ -289,3 +289,38 @@ def test_abrir_logs_va_a_la_ultima_corrida_y_las_incidencias_se_incorporan(ui, m
     monkeypatch.setattr(ui, "_ejecutar", lambda args: (llamadas.append(args), subprocess.CompletedProcess(args, 0, "Incorporado: 1 archivo(s)", ""))[1])
     ui.incorporar_incidencias()
     assert llamadas == [["scripts/incidencias.py", "incorporar"]] and ui.estado.get() == "Incidencias incorporadas"
+
+
+def test_pasar_lo_nuevo_al_historico_pide_confirmacion(ui, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(ui, "_ejecutar", lambda args: (llamadas.append(args), subprocess.CompletedProcess(args, 0, "3 incidencia(s) pasaron", ""))[1])
+    monkeypatch.setattr(ui_mod.messagebox, "askyesno", lambda *a, **k: False)
+    ui.consolidar_incidencias()
+    assert llamadas == []
+    monkeypatch.setattr(ui_mod.messagebox, "askyesno", lambda *a, **k: True)
+    ui.consolidar_incidencias()
+    assert llamadas == [["scripts/incidencias.py", "consolidar"]] and ui.estado.get() == "Hecho"
+
+
+def test_cargar_incidencias_abre_selector_y_usa_el_comando_facil(ui, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(ui, "_ejecutar", lambda args: (llamadas.append(args), subprocess.CompletedProcess(args, 0, "Cargado: 1 archivo(s) -> 21 incidencias nuevas", ""))[1])
+    monkeypatch.setattr(ui_mod.filedialog, "askopenfilenames", lambda **k: ())
+    ui.cargar_incidencias()
+    assert llamadas == []                                                   # canceló: no hace nada
+    monkeypatch.setattr(ui_mod.filedialog, "askopenfilenames", lambda **k: ("C:/x/a.xlsx", "C:/x/b.xlsx"))
+    ui.cargar_incidencias()
+    assert llamadas == [["scripts/incidencias.py", "cargar", "C:/x/a.xlsx", "C:/x/b.xlsx"]] and ui.estado.get() == "Incidencias cargadas"
+
+
+def test_cargar_incidencias_con_el_bot_corriendo_solo_deja_los_archivos(ui, monkeypatch, tmp_path):
+    from src.nucleo.rutas import Rutas
+
+    monkeypatch.setattr(ui_mod, "R", Rutas(tmp_path / "proyecto"))
+    origen = tmp_path / "nuevas.xlsx"
+    origen.write_bytes(b"x")
+    monkeypatch.setattr(ui, "_ejecutar", lambda args: pytest.fail("con el bot corriendo no se incorpora a mano: lo hace el vigilante"))
+    monkeypatch.setattr(ui_mod.filedialog, "askopenfilenames", lambda **k: (str(origen),))
+    ui.btn.configure(text="■  DETENER")
+    ui.cargar_incidencias()
+    assert (tmp_path / "proyecto" / "data" / "Incidencias" / "nuevas" / "nuevas.xlsx").exists() and "vigilante" in ui.estado.get().lower()

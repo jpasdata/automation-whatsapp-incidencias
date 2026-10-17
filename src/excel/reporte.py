@@ -276,60 +276,45 @@ def _texto_estado(i: dict) -> str:
     return base
 
 
-def escribir_cruzado(cfg, analisis: list[dict], ruta_original: Path, ruta_salida: Path) -> int:
+def escribir_estado_en_base(cfg, analisis: list[dict], ruta_base: Path) -> int:
     """
-    Copia del Excel de incidencias con el resultado del cruce escrito en las columnas Estado_Automatico y
-    Ruta_Evidencia de CADA fila (hoja principal y hojas adicionales), coloreadas por estado. El original no se toca.
-    Devuelve cuántas filas se escribieron. Los gráficos/imágenes del Excel original no se conservan en esta copia.
+    Escribe el resultado del cruce (Estado_Automatico y Ruta_Evidencia, coloreado) en cada fila de la base, en las hojas «Histórico» y «Nuevas»,
+    buscando cada fila por su número de incidencia. Es el MISMO archivo de incidencias (no hay una copia aparte). Si está abierto en cualquier programa de hojas de cálculo,
+    `os.replace` falla con PermissionError y se reintenta en la siguiente actualización. Devuelve cuántas filas se escribieron.
     """
+    import os
+
     from openpyxl import load_workbook
 
-    mejor: dict[tuple[str, int], dict] = {}
+    mejor: dict[str, dict] = {}
     for a in analisis:
         for i in a["incidencias"]:
-            clave = (i["hoja"], i["fila"])
-            previo = mejor.get(clave)
-            # una fila "SIN DATOS" aparece en todos los grupos: gana el que sí encontró evidencia
-            if previo is None or (i["paquetes"] > previo["paquetes"]):
-                mejor[clave] = i
-    wb = load_workbook(ruta_original)
+            clave = str(int(float(i["corto"]))) if str(i.get("corto") or "").strip().replace(".", "", 1).isdigit() else None
+            if clave and (clave not in mejor or i["paquetes"] > mejor[clave]["paquetes"]):
+                mejor[clave] = i       # una fila «SIN DATOS» aparece en varios grupos: gana la que sí encontró evidencia
+    wb = load_workbook(ruta_base)
     e = cfg.excel
-    principal = wb[e.nombre_hoja]
-
-    def columnas(ws, crear: bool):
-        idx = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
-        if crear:
-            for nombre in (e.columna_estado_automatico, e.columna_ruta_foto):
-                if nombre not in idx:
-                    idx[nombre] = max(idx.values()) + 1
-                    ws.cell(row=1, column=idx[nombre], value=nombre)
-        return idx
-
-    idx_main = columnas(principal, True)
     escritas = 0
-    for hoja_nombre in (None, *e.hojas_extra):
-        ws = principal if hoja_nombre is None else (wb[hoja_nombre] if hoja_nombre in wb.sheetnames else None)
-        if ws is None:
+    for ws in wb.worksheets:
+        idx = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
+        if "Incidencia" not in idx or e.columna_estado_automatico not in idx or e.columna_ruta_foto not in idx:
             continue
-        if hoja_nombre is None:
-            idx = idx_main
-        else:
-            idx = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
-            if e.columna_codigo_largo in idx:
-                idx = columnas(ws, True)
-            else:  # sin encabezado: mismas columnas que la hoja principal
-                idx = idx_main
-        clave_hoja = "Asignacion" if hoja_nombre is None else hoja_nombre
-        for (hoja, fila), i in mejor.items():
-            if (hoja or "Asignacion") != clave_hoja:
+        for fila in range(2, ws.max_row + 1):
+            v = ws.cell(row=fila, column=idx["Incidencia"]).value
+            try:
+                inc = str(int(float(str(v).strip())))
+            except (TypeError, ValueError):
+                continue
+            i = mejor.get(inc)
+            if i is None:
                 continue
             celda = ws.cell(row=fila, column=idx[e.columna_estado_automatico], value=_texto_estado(i))
             _color_estado(celda, i["estado"])
+            celda.alignment = Alignment(vertical="center", wrap_text=False)
             ws.cell(row=fila, column=idx[e.columna_ruta_foto], value=i["carpeta"] or None)
             escritas += 1
-    ruta_salida.parent.mkdir(parents=True, exist_ok=True)
-    tmp = ruta_salida.with_suffix(".tmp.xlsx")
+    tmp = ruta_base.with_suffix(".tmp.xlsx")
     wb.save(tmp)
-    import os
-    os.replace(tmp, ruta_salida)
+    wb.close()
+    os.replace(tmp, ruta_base)
     return escritas
