@@ -688,19 +688,37 @@ def leer_mensajes_recientes(
 
 
 _JS_VISOR_PRINCIPAL = """() => {
-  // Elemento grande del visor (foto o video); las miniaturas de la tira inferior son pequeñas.
+  // Elemento grande del visor (foto o video). Mientras carga, el visor muestra `media-state-pending` + un círculo
+  // y una miniatura borrosa: solo se da por listo cuando aparece `media-zoomable` (foto) o el <video> tiene datos.
   const cands = [...document.querySelectorAll('img, video')].map(e => {
     const r = e.getBoundingClientRect();
-    return {e, area: r.width * r.height, src: e.currentSrc || e.src || ''};
-  }).filter(c => c.src.startsWith('blob:') && c.area > 60000);
-  cands.sort((x, y) => y.area - x.area);
-  return cands.length ? {src: cands[0].src, tag: cands[0].e.tagName} : null;
+    return {e, area: r.width * r.height, nat: (e.naturalWidth || e.videoWidth || 0) * (e.naturalHeight || e.videoHeight || 0), src: e.currentSrc || e.src || ''};
+  }).filter(c => (c.src.startsWith('blob:') || c.src.includes('/stream/video')) && c.area > 60000);
+  if (!cands.length) return null;
+  // Si el visor tiene un <video>, ese es el elemento principal (las demás imágenes son la tira de miniaturas).
+  const vid = cands.filter(x => x.e.tagName === 'VIDEO');
+  const pool = vid.length ? vid : cands;
+  pool.sort((x, y) => y.nat - x.nat || y.area - x.area);
+  const c = pool[0];
+  const listo = c.e.tagName === 'VIDEO' ? c.e.readyState >= 3 : (!!document.querySelector('[data-testid="media-zoomable"]') && !document.querySelector('[data-testid="media-state-pending"]'));
+  return {src: c.src, tag: c.e.tagName, listo};
 }"""
 
 _JS_BAJAR_BLOB = """async (src) => {
-  const b = await (await fetch(src)).blob(); const u = new Uint8Array(await b.arrayBuffer());
-  let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
-  return {tipo: b.type, b64: btoa(s)};
+  // El flujo de video entrega 206 por partes: se piden rangos sucesivos hasta completar el total.
+  const aB64 = u => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+  const trozos = []; let inicio = 0, total = null, tipo = '';
+  for (let k = 0; k < 400; k++) {
+    const res = await fetch(src, {headers: {Range: 'bytes=' + inicio + '-'}});
+    const b = await res.blob(); tipo = tipo || b.type;
+    const u = new Uint8Array(await b.arrayBuffer());
+    if (!u.length) break;
+    trozos.push(aB64(u)); inicio += u.length;
+    const cr = res.headers.get('content-range');
+    if (cr && total === null) total = parseInt(cr.split('/')[1]);
+    if (res.status === 200 || total === null || inicio >= total) break;
+  }
+  return {tipo, trozos, n: inicio, total: total === null ? inicio : total};
 }"""
 
 
@@ -723,30 +741,23 @@ def _bajar_elemento_actual(pagina: Page, carpeta: Path, base: str) -> Path | Non
     import mimetypes
 
     principal = None
-    for _ in range(14):  # hasta ~7 s a que el visor cargue el elemento completo
+    for _ in range(40):  # hasta ~20 s a que el visor termine de cargar el original (si no, se omite)
         pagina.wait_for_timeout(500)
         principal = pagina.evaluate(_JS_VISOR_PRINCIPAL)
-        if principal:
+        if principal and principal["listo"]:
             break
-    if not principal:
+    if not principal or not principal["listo"]:
+        logger.warning("El visor no terminó de cargar '%s' en 20 s (¿el celular aún no la ha bajado?); se omite.", base)
         return None
-    if principal["tag"] == "VIDEO":
-        try:
-            with pagina.expect_download(timeout=45_000) as info:
-                pagina.locator(_BOTON_DESCARGAR).first.click(timeout=4_000)
-            d = info.value
-            ruta = carpeta / f"{base}{Path(d.suggested_filename).suffix or '.mp4'}"
-            d.save_as(ruta)
-            return ruta
-        except Exception as e:  # noqa: BLE001
-            if "closed" in str(e).lower():
-                raise
-            logger.warning("Botón Descargar falló para el video '%s' (%s); se intenta por blob.", base, str(e)[:80])
     datos = pagina.evaluate(_JS_BAJAR_BLOB, principal["src"])
-    ext = mimetypes.guess_extension(datos["tipo"].split(";")[0]) or (".mp4" if principal["tag"] == "VIDEO" else ".jpg")
+    ext = (mimetypes.guess_extension(datos["tipo"].split(";")[0]) if datos["tipo"] else None) or (".mp4" if principal["tag"] == "VIDEO" else ".jpg")
     ext = ".jpg" if ext in (".jpe", ".jpeg") else ext
+    if ext in (".bin", ".dat") or not ext:  # el flujo no declara tipo: por el elemento
+        ext = ".mp4" if principal["tag"] == "VIDEO" else ".jpg"
+    if datos.get("total") and datos["n"] < datos["total"]:
+        logger.warning("'%s' llegó incompleto (%d de %d bytes).", base, datos["n"], datos["total"])
     ruta = carpeta / f"{base}{ext}"
-    ruta.write_bytes(base64.b64decode(datos["b64"]))
+    ruta.write_bytes(b"".join(base64.b64decode(t) for t in datos["trozos"]))
     return ruta
 
 
