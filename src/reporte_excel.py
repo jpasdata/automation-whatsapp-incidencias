@@ -21,6 +21,7 @@ from openpyxl.utils import get_column_letter
 
 from .config import provincias_de_grupo
 from .cruce import cruzar
+from .descargas import etiqueta_identificador
 from .matcher import asociar_mensajes
 
 AZUL, GRIS = "1F3864", "F2F2F2"
@@ -123,7 +124,24 @@ def analizar_grupo(cfg, excel, indice, grupo: str, desde: datetime) -> dict:
             d["fotos"] += sum(a.suffix.lower() not in EXT_VIDEO for a in arch)
             d["videos"] += sum(a.suffix.lower() in EXT_VIDEO for a in arch)
     sin_cruce = [c for c in cruces if c.fila is None]
-    return {"grupo": grupo, "incidencias": incidencias, "dias": dias, "sin_cruce": sin_cruce, "paquetes": len(cruces)}
+    filas_descarga = []
+    for c in cruces:
+        ms = c.match.mensaje
+        est, ruta = descargas.get(ms.id_mensaje, (None, None))
+        if est is None and c.fila is None:
+            continue  # lo que no cruza ni se bajó no es una "descarga"
+        archivos = [a for a in _archivos(ruta) if a.exists()]
+        tam = sum(a.stat().st_size for a in archivos) / 1e6
+        resultado = ("pendiente (cruza, aún sin bajar)" if est is None else "error" if est == "error"
+                     else "error" if not archivos else "ok")
+        filas_descarga.append({
+            "id": ms.id_mensaje, "dia": f"{ms.timestamp:%Y-%m-%d}", "hora": f"{ms.timestamp:%H:%M}", "remitente": ms.remitente or "",
+            "identificador": etiqueta_identificador(c) or "(sin número)", "hoja": (c.fila.hoja or "Asignacion") if c.fila else "",
+            "fila": c.fila.fila_excel if c.fila else "", "origen": c.match.origen.value, "esperados": ms.n_adjuntos, "bajados": len(archivos),
+            "mb": round(tam, 2), "resultado": resultado, "carpeta": str(archivos[0].parent) if archivos else "",
+        })
+    return {"grupo": grupo, "incidencias": incidencias, "dias": dias, "sin_cruce": sin_cruce, "paquetes": len(cruces),
+            "descargas": filas_descarga}
 
 
 def _mb(v) -> float:
@@ -212,17 +230,24 @@ def generar_reporte(cfg, excel, indice, grupos: list[str], desde: datetime, ruta
                    "Fotos descargadas", "Videos descargados"], filas, {1: 26, 2: 12, 3: 16, 4: 16, 5: 16, 6: 14, 7: 14, 8: 14})
 
     # ---- Descargas ----------------------------------------------------------------------------
+    # Fuente: el índice (todo lo descargado, siempre completo). El CSV de detalle solo aporta el motivo de un fallo.
     ws = wb.create_sheet("Descargas")
-    det = _leer_csv(carpeta_logs / "descargas_detalle.csv")
-    filas = [[d.get("ts"), (d.get("grupo") or "")[:30], d.get("dia"), d.get("hora"), d.get("remitente"), d.get("fila"), d.get("codigo"),
-              d.get("origen"), d.get("esperados"), d.get("bajados"), _mb(d.get("bytes")), d.get("segundos"),
-              d.get("resultado"), d.get("error"), d.get("carpeta")] for d in det]
-    _tabla(ws, 1, ["Cuándo", "Grupo", "Día", "Hora", "Remitente", "Fila", "Código", "Cómo se identificó", "Esperados", "Bajados", "MB",
-                   "Segundos", "Resultado", "Error / motivo", "Carpeta"], filas,
-           {1: 19, 2: 20, 3: 11, 4: 7, 5: 20, 6: 7, 7: 16, 8: 18, 9: 10, 10: 9, 11: 8, 12: 9, 13: 11, 14: 50, 15: 55})
+    motivos = {d.get("id_mensaje"): d.get("error") for d in _leer_csv(carpeta_logs / "descargas_detalle.csv") if d.get("error")}
+    filas = []
+    for a in analisis:
+        for d in sorted(a["descargas"], key=lambda x: (x["dia"], x["hora"])):
+            filas.append([a["grupo"][:30], d["dia"], d["hora"], d["remitente"], d["identificador"], d["hoja"], d["fila"], d["origen"],
+                          d["esperados"], d["bajados"], d["mb"], d["resultado"], motivos.get(d["id"], ""), d["carpeta"]])
+    _tabla(ws, 1, ["Grupo", "Día", "Hora", "Remitente", "Identificador (aviso/incidencia)", "Hoja", "Fila", "Cómo se identificó", "Miniaturas en el chat",
+                   "Bajados", "MB", "Resultado", "Motivo si falló", "Carpeta"], filas,
+           {1: 20, 2: 11, 3: 7, 4: 18, 5: 34, 6: 14, 7: 7, 8: 18, 9: 10, 10: 9, 11: 8, 12: 28, 13: 40, 14: 60})
     for r in range(2, len(filas) + 2):
-        res = str(ws.cell(row=r, column=13).value)
-        ws.cell(row=r, column=13).fill = PatternFill("solid", fgColor={"ok": VERDE, "parcial": AMBAR, "error": ROJO}.get(res, NEUTRO))
+        res = str(ws.cell(row=r, column=12).value)
+        ws.cell(row=r, column=12).fill = PatternFill("solid", fgColor=VERDE if res == "ok" else AMBAR if res.startswith(("parcial", "pendiente")) else ROJO)
+        ruta = ws.cell(row=r, column=14).value
+        if ruta:
+            ws.cell(row=r, column=14).hyperlink = Path(ruta).resolve().as_uri()
+            ws.cell(row=r, column=14).font = Font(color="0563C1", underline="single")
 
     # ---- Sin cruce ----------------------------------------------------------------------------
     ws = wb.create_sheet("Sin cruce")

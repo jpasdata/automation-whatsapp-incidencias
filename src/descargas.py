@@ -194,6 +194,7 @@ def descargar_visibles(
             miniaturas = bub.locator('[data-testid="image-thumb"], [data-testid="video-content"]')
             hay_album = bub.locator('[data-testid="media-album"]').count() > 0
             errores: list[str] = []
+            nota = ""
             t0 = time.time()
             logger.info("  Bajando %s %s de %s -> %s/%s (cruce: %s, fila %s)", tarea.meta.get("dia"), tarea.meta.get("hora"),
                         tarea.meta.get("remitente"), tarea.carpeta.parent.name, tarea.carpeta.name, tarea.meta.get("origen"), tarea.meta.get("fila"))
@@ -208,9 +209,10 @@ def descargar_visibles(
             if rutas:
                 indice.marcar_descarga(grupo, id_msg, "ok", ";".join(str(r) for r in rutas))
                 ok += 1
-                if tarea.n_esperadas and len(rutas) < tarea.n_esperadas:
-                    errores.append(f"solo {len(rutas)} de {tarea.n_esperadas} adjuntos esperados")
-                    resultado = "parcial"
+                if any("no terminó de cargar" in e or "Error" in e for e in errores):
+                    resultado = "parcial"  # alguna foto del álbum sí falló
+                nota = (f"el chat mostraba {tarea.n_esperadas} miniaturas y el visor tenía {len(rutas)}"
+                        if tarea.n_esperadas and len(rutas) != tarea.n_esperadas else "")
             else:
                 indice.marcar_descarga(grupo, id_msg, "error")
                 mal += 1
@@ -219,7 +221,7 @@ def descargar_visibles(
             eventos.registrar_csv("descargas_detalle.csv", {
                 "grupo": grupo, **tarea.meta, "id_mensaje": id_msg, "estado_cruce": tarea.estado, "esperados": tarea.n_esperadas,
                 "bajados": len(rutas), "bytes": tam, "segundos": segundos, "resultado": resultado,
-                "error": " | ".join(errores), "carpeta": str(tarea.carpeta),
+                "error": " | ".join(errores), "nota": nota, "carpeta": str(tarea.carpeta),
             })
             pagina.wait_for_timeout(random.randint(900, 2600))  # ritmo humano entre mensajes
         r = pagina.evaluate(_JS_PASO_ABAJO, factor)
