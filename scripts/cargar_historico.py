@@ -26,6 +26,13 @@ ap.add_argument("--minutos", type=int, default=10, help="Tiempo máximo esperand
 ap.add_argument("--descargar", action="store_true", help="Descargar las fotos que cruzan con una incidencia de Henry (carpetas por día)")
 args = ap.parse_args()
 
+from src.verificador import hay_errores, informe, verificar  # noqa: E402
+
+_pre = verificar()
+print(informe(_pre), flush=True)
+if hay_errores(_pre):
+    sys.exit("No se inicia: arregla lo marcado como ERROR (ver 'QUÉ HACER') y vuelve a correr.")
+
 if sys.platform == "win32":  # que el PC no se duerma durante la corrida (no cambia la configuración de Windows)
     import ctypes
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001 | 0x00000002)

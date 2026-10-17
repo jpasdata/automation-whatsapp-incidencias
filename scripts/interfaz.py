@@ -25,6 +25,7 @@ sys.path.insert(0, str(RAIZ))
 from src.config import load_config  # noqa: E402
 from src.descargas import RAIZ_EVIDENCIAS  # noqa: E402
 from src.historico import RUTA_INDICE  # noqa: E402
+from src.verificador import hay_errores, informe, verificar  # noqa: E402
 from src.indice import Indice  # noqa: E402
 
 MODOS = {
@@ -63,6 +64,7 @@ class Interfaz:
         self.btn = tk.Button(botones, text="INICIAR", font=("Segoe UI", 14, "bold"), bg="#2e7d32", fg="white",
                              width=14, command=self.alternar)
         self.btn.pack(side="left")
+        tk.Button(botones, text="Verificar entorno", font=("Segoe UI", 10), command=self.verificar_entorno).pack(side="left", padx=10)
         self.estado = tk.StringVar(value="Detenido")
         tk.Label(botones, textvariable=self.estado, font=("Segoe UI", 13, "bold")).pack(side="left", padx=16)
 
@@ -88,7 +90,20 @@ class Interfaz:
         else:
             self.iniciar()
 
+    def verificar_entorno(self) -> bool:
+        """Corre las revisiones previas y las muestra en el panel. True si se puede correr."""
+        self.estado.set("Verificando...")
+        self.r.update_idletasks()
+        res = verificar()
+        self.texto.delete("1.0", "end")
+        self.texto.insert("end", informe(res) + "\n")
+        ok = not hay_errores(res)
+        self.estado.set("Listo para correr" if ok else "Hay errores: lee 'QUÉ HACER'")
+        return ok
+
     def iniciar(self) -> None:
+        if not self.verificar_entorno():
+            return
         orden = [sys.executable, "-u", *MODOS[self.modo.get()]]
         if "cargar_historico" in orden[2]:
             orden += ["--grupo", self.grupo.get(), "--minutos", self.minutos.get()]
@@ -97,7 +112,6 @@ class Interfaz:
                                      text=True, encoding="utf-8", errors="replace", creationflags=0x08000000)
         threading.Thread(target=self._leer, daemon=True).start()
         self.inicio = datetime.now()
-        self.texto.delete("1.0", "end")
         self.btn.config(text="DETENER", bg="#c62828")
         self.estado.set("Corriendo...")
         self.v["fase"].set("Abriendo WhatsApp Web")
